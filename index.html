@@ -33,14 +33,49 @@ h1{text-align:center;color:#b22222;margin-top:0}
 .card>button{width:100%;padding:13px;margin-top:10px;background:#b22222;color:#fff;border:none;border-radius:12px;font-size:17px;cursor:pointer}
 #sheet{background:#fff;padding:25px;margin-top:20px;border:2px solid #ddd;border-radius:12px}
 .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ccc}
+
+.date-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin:8px 0 18px;
+    font-weight:700;
+}
+.date-row label{
+    white-space:nowrap;
+    font-size:16px;
+}
+.date-row input{
+    padding:8px 10px;
+    border:1px solid #d6d9df;
+    border-radius:10px;
+    font-size:16px;
+    background:#fff;
+}
+.logo{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    margin:4px 0 20px;
+}
+.logo img{
+    width:390px;
+    max-width:92%;
+    height:auto;
+    display:block;
+}
+
 </style>
 </head>
 <body>
 <div class="card">
 <div class="logo">
-    <img src="logo.png" alt="동래옥">
+    <img src="logo_clean.png" alt="동래옥">
 </div>
-<p>날짜 <input type="date" id="d"></p>
+<div class="date-row">
+  <label for="d">발주 날짜</label>
+  <input type="date" id="d">
+</div>
 
 <div id="items"></div>
 
@@ -67,7 +102,7 @@ names.forEach((n,i)=>{
  wrap.innerHTML+=`<div class=item>
  <span>${n[0]}</span>
  <button type="button" onclick="chg(${i},-1)">-</button>
- <span id="v${i}" style="width:60px;text-align:center">0${n[1]}</span>
+ <span id="v${i}" style="width:60px;text-align:center">0</span>
  <button type="button" onclick="chg(${i},1)">+</button>
  </div>`;
 });
