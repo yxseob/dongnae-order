@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>동래옥 주방 발주</title>
+
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+.logo{
+    text-align:center;
+    margin-bottom:20px;
+}
+
+.logo img{
+    width:320px;
+    max-width:90%;
+    height:auto;
+}
+body{font-family:Arial,sans-serif;background:#eef2f7;margin:0;padding:18px}
+.card{max-width:700px;margin:auto;background:#fff;padding:20px;border-radius:18px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+h1{text-align:center;color:#b22222;margin-top:0}
+.item{display:flex;align-items:center;justify-content:space-between;background:#fafafa;padding:10px 14px;border-radius:12px;margin:8px 0}
+.item>span:first-child{font-size:16px;font-weight:600;flex:1}
+.item button{width:34px;height:34px;border:none;border-radius:50%;font-size:20px;font-weight:bold;cursor:pointer;transition:.15s}
+.item button:active{transform:scale(.9)}
+.item button:first-of-type{background:#ddd;color:#333}
+.item button:last-of-type{background:#c62828;color:#fff}
+.item span[id^=v]{display:inline-block;width:30px;text-align:center;font-size:18px;font-weight:bold}
+.card>button{width:100%;padding:13px;margin-top:10px;background:#b22222;color:#fff;border:none;border-radius:12px;font-size:17px;cursor:pointer}
+#sheet{background:#fff;padding:25px;margin-top:20px;border:2px solid #ddd;border-radius:12px}
+.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ccc}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="logo">
+    <img src="logo.png" alt="동래옥">
+</div>
+<p>날짜 <input type="date" id="d"></p>
+
+<div id="items"></div>
+
+<button onclick="makeSheet()">발주서 만들기</button>
+<button onclick="saveImg()">이미지 저장</button>
+
+<div id="sheet">
+<h2 style="text-align:center">동래옥 진접본점</h2>
+<h3 style="text-align:center">발주서</h3>
+<p id="dateTxt"></p>
+<div id="list"></div>
+<p style="text-align:center;margin-top:20px">감사합니다.</p>
+</div>
+</div>
+
+<script>
+const names=[
+["토종순대","박스"],["백순대","박스"],["찰순대","박스"],["돼지머리(탕용)","박스"],["돼지머리(수육용)","박스"],
+["다대기","박스"],["사골육수","박스"],["갈비탕","박스"],
+["낚지볶음","박스"],["편육","박스"],["돈가스","박스"],["소곱창 전골","박스"],["소고기 곰탕","박스"],["순살족발","박스"],["함박","박스"],["우삼겹","박스"],["겉절이 김치","박스"],["돼지곱창","박스"],["오소리","박스"],
+];
+const wrap=document.getElementById("items");
+names.forEach((n,i)=>{
+ wrap.innerHTML+=`<div class=item>
+ <span>${n[0]}</span>
+ <button type="button" onclick="chg(${i},-1)">-</button>
+ <span id="v${i}" style="width:60px;text-align:center">0${n[1]}</span>
+ <button type="button" onclick="chg(${i},1)">+</button>
+ </div>`;
+});
+const qtys=new Array(names.length).fill(0);
+function chg(i,d){
+ qtys[i]=Math.max(0,qtys[i]+d);
+ document.getElementById("v"+i).innerText=qtys[i];
+}
+document.getElementById("d").value=new Date().toISOString().slice(0,10);
+
+function makeSheet(){
+ let list=document.getElementById("list");
+ list.innerHTML="";
+ document.getElementById("dateTxt").innerText=document.getElementById("d").value;
+ names.forEach((n,i)=>{
+   let q=qtys[i];
+   if(q>0){
+      list.innerHTML+=`<div class=row><span>✔ ${n[0]}</span><b>${q}${n[1]}</b></div>`;
+   }
+ });
+}
+
+function saveImg(){
+ html2canvas(document.getElementById("sheet")).then(canvas=>{
+   const a=document.createElement("a");
+   a.download="동래옥_발주서.png";
+   a.href=canvas.toDataURL();
+   a.click();
+ });
+}
+</script>
+</body>
+</html>
