@@ -9,6 +9,10 @@
 <link rel="apple-touch-icon" href="icon.png">
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+
 <script>
 (function(){
   let lastTouchEnd = 0;
@@ -26,6 +30,48 @@
   }, {passive:false});
 })();
 </script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBira1w_9lAJgPj7S6brkLTR68Lf4B1od0",
+  authDomain: "dongnae-order.firebaseapp.com",
+  databaseURL: "https://dongnae-order-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "dongnae-order",
+  storageBucket: "dongnae-order.firebasestorage.app",
+  messagingSenderId: "1028993435107",
+  appId: "1:1028993435107:web:b901915b0d0c8498164cd6"
+};
+
+let firebaseReady = false;
+let db = null;
+
+try{
+  if(!firebase.apps.length){
+    firebase.initializeApp(firebaseConfig);
+  }
+  db = firebase.database();
+  firebaseReady = true;
+}catch(error){
+  console.error("Firebase 초기화 실패:", error);
+}
+
+function updateCloudStatus(text, state="connecting"){
+  const el = document.getElementById("cloudStatus");
+  if(!el) return;
+  el.textContent = text;
+  el.className = "cloud-status " + state;
+}
+
+if(firebaseReady){
+  firebase.database().ref(".info/connected").on("value", snap=>{
+    updateCloudStatus(
+      snap.val() ? "☁️ 실시간 동기화 연결됨" : "☁️ 연결 대기 중",
+      snap.val() ? "online" : "offline"
+    );
+  });
+}
+</script>
+
 <script>
 /* 통합 화면 이동 */
 function setActiveScreen(id){
@@ -40,6 +86,9 @@ function showSchedule(){ setActiveScreen("scheduleScreen"); renderSchedule(); }
 /* 직원 스케줄 */
 let scheduleWeekStart = getMonday(new Date());
 let scheduleEmployees = [];
+let scheduleListenerRef = null;
+let scheduleSaveTimer = null;
+let scheduleLocalEditing = false;
 
 function getMonday(date){
   const d=new Date(date);
@@ -67,57 +116,97 @@ function defaultEmployees(){
 }
 function loadSchedule(){
   try{
-    const saved=localStorage.getItem(weekKey());
-    scheduleEmployees=saved?JSON.parse(saved):defaultEmployees();
-    scheduleEmployees.forEach(emp=>{
-      emp.shifts=(emp.shifts||[]).map(v=>String(v||"").trim()||"휴무");
-      while(emp.shifts.length<7) emp.shifts.push("휴무");
-    });
-  }catch(e){ scheduleEmployees=defaultEmployees(); }
+    const cached=localStorage.getItem(weekKey());
+    scheduleEmployees=cached?JSON.parse(cached):defaultEmployees();
+    normalizeEmployees();
+  }catch(e){
+    scheduleEmployees=defaultEmployees();
+  }
+}
+
+function normalizeEmployees(){
+  scheduleEmployees=(scheduleEmployees||defaultEmployees()).map(emp=>({
+    name:String(emp.name||"직원"),
+    shifts:Array.from({length:7},(_,i)=>String((emp.shifts||[])[i]||"").trim()||"휴무")
+  }));
+}
+
+function cloudSchedulePath(date=scheduleWeekStart){
+  return "dongrae/schedules/"+isoDate(date);
+}
+
+function detachScheduleListener(){
+  if(scheduleListenerRef){
+    scheduleListenerRef.off();
+    scheduleListenerRef=null;
+  }
+}
+
+function attachScheduleListener(){
+  detachScheduleListener();
+
+  if(!firebaseReady){
+    loadSchedule();
+    renderScheduleWithoutReload();
+    return;
+  }
+
+  const ref=db.ref(cloudSchedulePath());
+  scheduleListenerRef=ref;
+
+  ref.on("value",snap=>{
+    if(scheduleLocalEditing) return;
+
+    const value=snap.val();
+    if(value && Array.isArray(value.employees)){
+      scheduleEmployees=value.employees;
+      normalizeEmployees();
+      localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
+    }else{
+      loadSchedule();
+    }
+    renderScheduleWithoutReload();
+  },error=>{
+    console.error("스케줄 불러오기 실패:",error);
+    loadSchedule();
+    renderScheduleWithoutReload();
+  });
+}
+
+function queueScheduleCloudSave(){
+  scheduleLocalEditing=true;
+  clearTimeout(scheduleSaveTimer);
+
+  scheduleSaveTimer=setTimeout(async()=>{
+    normalizeEmployees();
+    localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
+
+    if(firebaseReady){
+      try{
+        await db.ref(cloudSchedulePath()).set({
+          employees:scheduleEmployees,
+          updatedAt:firebase.database.ServerValue.TIMESTAMP
+        });
+        const status=document.getElementById("saveStatus");
+        if(status) status.textContent="자동 저장 완료";
+      }catch(error){
+        console.error("스케줄 저장 실패:",error);
+        const status=document.getElementById("saveStatus");
+        if(status) status.textContent="오프라인 저장됨";
+      }
+    }
+    setTimeout(()=>{ scheduleLocalEditing=false; },500);
+  },500);
 }
 function renderSchedule(){
   loadSchedule();
-  const end=new Date(scheduleWeekStart);
-  end.setDate(end.getDate()+6);
-  document.getElementById("weekLabel").textContent=
-    `${scheduleWeekStart.getFullYear()}.${scheduleWeekStart.getMonth()+1}.${scheduleWeekStart.getDate()} - ${end.getMonth()+1}.${end.getDate()}`;
-
-  const days=["월","화","수","목","금","토","일"];
-  let head="<tr><th>직원</th>";
-  days.forEach((day,i)=>{
-    const d=new Date(scheduleWeekStart); d.setDate(d.getDate()+i);
-    const cls=i===5?"day-sat":i===6?"day-sun":"";
-    head+=`<th class="${cls}">${day}<br><small>${displayDate(d)}</small></th>`;
-  });
-  head+="</tr>";
-  document.getElementById("scheduleHead").innerHTML=head;
-
-  const body=document.getElementById("scheduleBody");
-  body.innerHTML="";
-  scheduleEmployees.forEach((emp,empIndex)=>{
-    const tr=document.createElement("tr");
-    let cells=`<td class="employee-cell">
-      <input class="employee-name" value="${escapeHtml(emp.name)}" oninput="updateEmployeeName(${empIndex},this.value)">
-      <button class="remove-employee" type="button" onclick="removeEmployee(${empIndex})">×</button>
-    </td>`;
-    for(let day=0;day<7;day++){
-      {
-        const current=(emp.shifts[day]||"휴무").trim()||"휴무";
-        const cls=getShiftClass(current);
-        cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(current)}"
-          onfocus="this.select()"
-          oninput="updateShift(${empIndex},${day},this)"
-          onblur="normalizeShift(${empIndex},${day},this)"></td>`;
-      }
-    }
-    tr.innerHTML=cells;
-    body.appendChild(tr);
-  });
+  renderScheduleWithoutReload();
+  attachScheduleListener();
 }
 function escapeHtml(value){
   return String(value).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
-function updateEmployeeName(i,value){ scheduleEmployees[i].name=value; markUnsaved(); }
+function updateEmployeeName(i,value){ scheduleEmployees[i].name=value; markUnsaved(); queueScheduleCloudSave(); }
 function getShiftClass(value){
   const normalized=String(value||"").trim();
 
@@ -136,6 +225,7 @@ function updateShift(i,d,input){
   scheduleEmployees[i].shifts[d]=value;
   applyShiftStyle(input);
   markUnsaved();
+  queueScheduleCloudSave();
 }
 function normalizeShift(i,d,input){
   if(input.value.trim()===""){
@@ -143,17 +233,20 @@ function normalizeShift(i,d,input){
     scheduleEmployees[i].shifts[d]="휴무";
   }
   applyShiftStyle(input);
+  queueScheduleCloudSave();
 }
 function addEmployee(){
   scheduleEmployees.push({name:`직원 ${scheduleEmployees.length+1}`,shifts:["휴무","휴무","휴무","휴무","휴무","휴무","휴무"]});
   renderScheduleWithoutReload();
   markUnsaved();
+  queueScheduleCloudSave();
 }
 function removeEmployee(i){
   if(!confirm("이 직원을 스케줄표에서 삭제할까요?")) return;
   scheduleEmployees.splice(i,1);
   renderScheduleWithoutReload();
   markUnsaved();
+  queueScheduleCloudSave();
 }
 function renderScheduleWithoutReload(){
   const temp=scheduleEmployees;
@@ -186,54 +279,90 @@ function renderScheduleWithoutReload(){
     tr.innerHTML=cells; body.appendChild(tr);
   });
 }
-function copyPreviousWeek(){
+async function copyPreviousWeek(){
   const previous=new Date(scheduleWeekStart);
   previous.setDate(previous.getDate()-7);
-  const key="dongrae_schedule_"+isoDate(previous);
-  const saved=localStorage.getItem(key);
 
-  if(!saved){
+  let copied=null;
+
+  if(firebaseReady){
+    try{
+      const snap=await db.ref(cloudSchedulePath(previous)).once("value");
+      const value=snap.val();
+      if(value && Array.isArray(value.employees)) copied=value.employees;
+    }catch(error){
+      console.error("저번주 클라우드 불러오기 실패:",error);
+    }
+  }
+
+  if(!copied){
+    const localKey="dongrae_schedule_"+isoDate(previous);
+    const saved=localStorage.getItem(localKey);
+    if(saved){
+      try{ copied=JSON.parse(saved); }catch(e){}
+    }
+  }
+
+  if(!copied){
     alert("저번 주에 저장된 스케줄이 없습니다.");
     return;
   }
+
   if(!confirm("저번 주 직원과 출근/휴무 내용을 이번 주로 그대로 불러올까요?")) return;
 
-  try{
-    const copied=JSON.parse(saved);
-    scheduleEmployees=copied.map(emp=>({
-      name:emp.name||"직원",
-      shifts:(emp.shifts||[]).map(v=>String(v||"").trim()||"휴무")
-    }));
-    scheduleEmployees.forEach(emp=>{
-      while(emp.shifts.length<7) emp.shifts.push("휴무");
-    });
-    renderScheduleWithoutReload();
-    markUnsaved();
-  }catch(e){
-    alert("저번 주 스케줄을 불러오지 못했습니다.");
-  }
+  scheduleEmployees=copied;
+  normalizeEmployees();
+  renderScheduleWithoutReload();
+  markUnsaved();
+  queueScheduleCloudSave();
 }
 
-function saveSchedule(){
+async function saveSchedule(){
+  normalizeEmployees();
   localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
-  const status=document.getElementById("saveStatus");
-  status.textContent="저장 완료";
-  setTimeout(()=>status.textContent="",1800);
+
+  try{
+    if(firebaseReady){
+      await db.ref(cloudSchedulePath()).set({
+        employees:scheduleEmployees,
+        updatedAt:firebase.database.ServerValue.TIMESTAMP
+      });
+    }
+    const status=document.getElementById("saveStatus");
+    status.textContent="저장 완료";
+    setTimeout(()=>status.textContent="",1800);
+  }catch(error){
+    console.error("스케줄 저장 실패:",error);
+    document.getElementById("saveStatus").textContent="오프라인 저장됨";
+  }
 }
 function markUnsaved(){
   document.getElementById("saveStatus").textContent="저장 필요";
 }
 function moveWeek(delta){
+  detachScheduleListener();
   scheduleWeekStart.setDate(scheduleWeekStart.getDate()+delta*7);
   renderSchedule();
   document.getElementById("saveStatus").textContent="";
 }
-function clearSchedule(){
+async function clearSchedule(){
   if(!confirm("이번 주 스케줄을 모두 초기화할까요?")) return;
-  localStorage.removeItem(weekKey());
+
   scheduleEmployees=defaultEmployees();
+  localStorage.removeItem(weekKey());
   renderScheduleWithoutReload();
   markUnsaved();
+
+  if(firebaseReady){
+    try{
+      await db.ref(cloudSchedulePath()).set({
+        employees:scheduleEmployees,
+        updatedAt:firebase.database.ServerValue.TIMESTAMP
+      });
+    }catch(error){
+      console.error("초기화 동기화 실패:",error);
+    }
+  }
 }
 function saveScheduleImage(){
   const target=document.getElementById("scheduleCapture");
@@ -636,6 +765,20 @@ input,select,textarea{
   font-size:16px;
 }
 
+
+.cloud-status{
+  width:max-content;
+  max-width:100%;
+  margin:8px auto 16px;
+  padding:7px 11px;
+  border-radius:999px;
+  font-size:13px;
+  font-weight:800;
+}
+.cloud-status.connecting{background:#eef1f5;color:#596273}
+.cloud-status.online{background:#e7f5eb;color:#28733f}
+.cloud-status.offline{background:#fff0e5;color:#a45c16}
+
 </style>
 </head>
 
@@ -648,6 +791,7 @@ input,select,textarea{
         <img src="logo_clean.png" alt="동래옥">
       </div>
       <div class="home-title">동래옥 통합 관리 시스템</div>
+      <div id="cloudStatus" class="cloud-status connecting">☁️ 실시간 동기화 연결 중</div>
       <p class="home-subtitle">원하는 메뉴를 선택하세요.</p>
       <div class="menu-grid">
         <button class="menu-card" type="button" onclick="showOrder()">
@@ -849,6 +993,59 @@ const pages = {
 
 let currentPage = "kitchen";
 const quantities = { kitchen:{}, hall:{}, vegetable:{} };
+let orderRemoteApplying=false;
+let orderSaveTimers={};
+
+function orderPath(pageKey){
+  return "dongrae/orders/"+pageKey;
+}
+
+function attachOrderSync(){
+  ["kitchen","hall","vegetable"].forEach(pageKey=>{
+    if(!firebaseReady) return;
+
+    db.ref(orderPath(pageKey)).on("value",snap=>{
+      const value=snap.val();
+      if(!value || !value.quantities) return;
+
+      orderRemoteApplying=true;
+      quantities[pageKey]=value.quantities||{};
+
+      if(currentPage===pageKey){
+        renderPage();
+      }
+      setTimeout(()=>{ orderRemoteApplying=false; },150);
+    },error=>console.error(pageKey+" 발주 동기화 실패:",error));
+  });
+}
+
+function queueOrderSave(pageKey){
+  if(orderRemoteApplying) return;
+  clearTimeout(orderSaveTimers[pageKey]);
+
+  orderSaveTimers[pageKey]=setTimeout(async()=>{
+    try{
+      localStorage.setItem("dongrae_order_"+pageKey,JSON.stringify(quantities[pageKey]));
+      if(firebaseReady){
+        await db.ref(orderPath(pageKey)).set({
+          quantities:quantities[pageKey],
+          updatedAt:firebase.database.ServerValue.TIMESTAMP
+        });
+      }
+    }catch(error){
+      console.error(pageKey+" 발주 저장 실패:",error);
+    }
+  },250);
+}
+
+function loadOrderLocalCache(){
+  ["kitchen","hall","vegetable"].forEach(pageKey=>{
+    try{
+      const saved=localStorage.getItem("dongrae_order_"+pageKey);
+      if(saved) quantities[pageKey]=JSON.parse(saved);
+    }catch(e){}
+  });
+}
 
 function getFlatItems(pageKey){
   const page = pages[pageKey];
@@ -912,6 +1109,7 @@ function changeQty(index,delta){
   const old=quantities[currentPage][index]||0;
   quantities[currentPage][index]=Math.max(0,old+delta);
   document.getElementById(`count-${currentPage}-${index}`).textContent=quantities[currentPage][index];
+  queueOrderSave(currentPage);
 }
 
 function openPage(pageKey){
@@ -1020,7 +1218,9 @@ function saveImg(){
 
 document.getElementById("d").value=new Date().toISOString().slice(0,10);
 history.replaceState({page:"kitchen"},"",location.pathname);
+loadOrderLocalCache();
 renderPage();
+attachOrderSync();
 </script>
 </div>
 
