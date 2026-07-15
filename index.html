@@ -2,13 +2,23 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>동래옥</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>동래옥 발주</title>
 
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
+(function(){
+let last=0;
+document.addEventListener('touchend',function(e){
+const now=Date.now();
+if(now-last<300)e.preventDefault();
+last=now;
+},{passive:false});
+document.addEventListener('gesturestart',function(e){e.preventDefault();},{passive:false});
+})();
+</script>
 <script>
 /* 통합 화면 이동 */
 function setActiveScreen(id){
@@ -564,6 +574,21 @@ body{
   .week-controls{width:100%}
   #weekLabel{flex:1;text-align:center;font-size:13px}
 }
+
+
+/* Prevent zoom */
+html,body,button,input,select,textarea,
+.menu-card,.home-card,.card,.schedule-card,
+.item,.controls,.circle-btn,.nav-btn,.back-btn,.home-back,
+.tool-btn,.week-btn,.action-btn{
+touch-action:manipulation;
+-ms-touch-action:manipulation;
+-webkit-touch-callout:none;
+-webkit-tap-highlight-color:transparent;
+-webkit-user-select:none;
+user-select:none;
+}
+input[type="text"],input[type="date"]{font-size:16px;}
 
 </style>
 </head>
