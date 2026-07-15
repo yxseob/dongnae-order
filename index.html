@@ -1043,14 +1043,25 @@ function attachOrderSync(){
 
     db.ref(orderPath(pageKey)).on("value",snap=>{
       const value=snap.val();
-      if(!value || !value.quantities) return;
+
+      // Firebase Realtime Database는 빈 객체({})를 저장하지 않습니다.
+      // 따라서 quantities가 없더라도 해당 경로에 값이 있으면 "전체 0개로 초기화"로 처리합니다.
+      if(!value) return;
 
       orderRemoteApplying=true;
-      quantities[pageKey]=value.quantities||{};
+      quantities[pageKey]=(value.quantities && typeof value.quantities==="object")
+        ? value.quantities
+        : {};
+
+      localStorage.setItem(
+        "dongrae_order_"+pageKey,
+        JSON.stringify(quantities[pageKey])
+      );
 
       if(currentPage===pageKey){
         renderPage();
       }
+
       setTimeout(()=>{ orderRemoteApplying=false; },150);
     },error=>console.error(pageKey+" 발주 동기화 실패:",error));
   });
@@ -1066,6 +1077,7 @@ function queueOrderSave(pageKey){
       if(firebaseReady){
         await db.ref(orderPath(pageKey)).set({
           quantities:quantities[pageKey],
+          reset:false,
           updatedAt:firebase.database.ServerValue.TIMESTAMP
         });
       }
@@ -1195,7 +1207,8 @@ async function resetCurrentOrder(){
 
     if(firebaseReady){
       await db.ref(orderPath(currentPage)).set({
-        quantities:{},
+        quantities:null,
+        reset:true,
         updatedAt:firebase.database.ServerValue.TIMESTAMP
       });
     }
