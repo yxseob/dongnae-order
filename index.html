@@ -2,13 +2,161 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>동래옥 발주</title>
 
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
+/* 통합 화면 이동 */
+function setActiveScreen(id){
+  document.querySelectorAll(".screen").forEach(el=>el.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function showHome(){ setActiveScreen("homeScreen"); }
+function showOrder(){ setActiveScreen("orderScreen"); }
+function showSchedule(){ setActiveScreen("scheduleScreen"); renderSchedule(); }
+
+/* 직원 스케줄 */
+let scheduleWeekStart = getMonday(new Date());
+let scheduleEmployees = [];
+
+function getMonday(date){
+  const d=new Date(date);
+  const day=d.getDay();
+  const diff=d.getDate()-day+(day===0?-6:1);
+  d.setDate(diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function isoDate(date){
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,"0");
+  const d=String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+function displayDate(date){
+  return `${date.getMonth()+1}/${date.getDate()}`;
+}
+function weekKey(){ return "dongrae_schedule_"+isoDate(scheduleWeekStart); }
+function defaultEmployees(){
+  return [
+    {name:"직원 1",shifts:["","","","","","",""]},
+    {name:"직원 2",shifts:["","","","","","",""]}
+  ];
+}
+function loadSchedule(){
+  try{
+    const saved=localStorage.getItem(weekKey());
+    scheduleEmployees=saved?JSON.parse(saved):defaultEmployees();
+  }catch(e){ scheduleEmployees=defaultEmployees(); }
+}
+function renderSchedule(){
+  loadSchedule();
+  const end=new Date(scheduleWeekStart);
+  end.setDate(end.getDate()+6);
+  document.getElementById("weekLabel").textContent=
+    `${scheduleWeekStart.getFullYear()}.${scheduleWeekStart.getMonth()+1}.${scheduleWeekStart.getDate()} - ${end.getMonth()+1}.${end.getDate()}`;
+
+  const days=["월","화","수","목","금","토","일"];
+  let head="<tr><th>직원</th>";
+  days.forEach((day,i)=>{
+    const d=new Date(scheduleWeekStart); d.setDate(d.getDate()+i);
+    const cls=i===5?"day-sat":i===6?"day-sun":"";
+    head+=`<th class="${cls}">${day}<br><small>${displayDate(d)}</small></th>`;
+  });
+  head+="</tr>";
+  document.getElementById("scheduleHead").innerHTML=head;
+
+  const body=document.getElementById("scheduleBody");
+  body.innerHTML="";
+  scheduleEmployees.forEach((emp,empIndex)=>{
+    const tr=document.createElement("tr");
+    let cells=`<td class="employee-cell">
+      <input class="employee-name" value="${escapeHtml(emp.name)}" oninput="updateEmployeeName(${empIndex},this.value)">
+      <button class="remove-employee" type="button" onclick="removeEmployee(${empIndex})">×</button>
+    </td>`;
+    for(let day=0;day<7;day++){
+      cells+=`<td><input class="shift-input" placeholder="휴무" value="${escapeHtml(emp.shifts[day]||"")}" oninput="updateShift(${empIndex},${day},this.value)"></td>`;
+    }
+    tr.innerHTML=cells;
+    body.appendChild(tr);
+  });
+}
+function escapeHtml(value){
+  return String(value).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function updateEmployeeName(i,value){ scheduleEmployees[i].name=value; markUnsaved(); }
+function updateShift(i,d,value){ scheduleEmployees[i].shifts[d]=value; markUnsaved(); }
+function addEmployee(){
+  scheduleEmployees.push({name:`직원 ${scheduleEmployees.length+1}`,shifts:["","","","","","",""]});
+  renderScheduleWithoutReload();
+  markUnsaved();
+}
+function removeEmployee(i){
+  if(!confirm("이 직원을 스케줄표에서 삭제할까요?")) return;
+  scheduleEmployees.splice(i,1);
+  renderScheduleWithoutReload();
+  markUnsaved();
+}
+function renderScheduleWithoutReload(){
+  const temp=scheduleEmployees;
+  const end=new Date(scheduleWeekStart); end.setDate(end.getDate()+6);
+  document.getElementById("weekLabel").textContent=
+    `${scheduleWeekStart.getFullYear()}.${scheduleWeekStart.getMonth()+1}.${scheduleWeekStart.getDate()} - ${end.getMonth()+1}.${end.getDate()}`;
+  const days=["월","화","수","목","금","토","일"];
+  let head="<tr><th>직원</th>";
+  days.forEach((day,i)=>{
+    const d=new Date(scheduleWeekStart); d.setDate(d.getDate()+i);
+    const cls=i===5?"day-sat":i===6?"day-sun":"";
+    head+=`<th class="${cls}">${day}<br><small>${displayDate(d)}</small></th>`;
+  });
+  head+="</tr>";
+  document.getElementById("scheduleHead").innerHTML=head;
+  const body=document.getElementById("scheduleBody"); body.innerHTML="";
+  temp.forEach((emp,empIndex)=>{
+    const tr=document.createElement("tr");
+    let cells=`<td class="employee-cell"><input class="employee-name" value="${escapeHtml(emp.name)}" oninput="updateEmployeeName(${empIndex},this.value)"><button class="remove-employee" type="button" onclick="removeEmployee(${empIndex})">×</button></td>`;
+    for(let day=0;day<7;day++){
+      cells+=`<td><input class="shift-input" placeholder="휴무" value="${escapeHtml(emp.shifts[day]||"")}" oninput="updateShift(${empIndex},${day},this.value)"></td>`;
+    }
+    tr.innerHTML=cells; body.appendChild(tr);
+  });
+}
+function saveSchedule(){
+  localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
+  const status=document.getElementById("saveStatus");
+  status.textContent="저장 완료";
+  setTimeout(()=>status.textContent="",1800);
+}
+function markUnsaved(){
+  document.getElementById("saveStatus").textContent="저장 필요";
+}
+function moveWeek(delta){
+  scheduleWeekStart.setDate(scheduleWeekStart.getDate()+delta*7);
+  renderSchedule();
+  document.getElementById("saveStatus").textContent="";
+}
+function clearSchedule(){
+  if(!confirm("이번 주 스케줄을 모두 초기화할까요?")) return;
+  localStorage.removeItem(weekKey());
+  scheduleEmployees=defaultEmployees();
+  renderScheduleWithoutReload();
+  markUnsaved();
+}
+function saveScheduleImage(){
+  const target=document.getElementById("scheduleCapture");
+  html2canvas(target,{backgroundColor:"#ffffff",scale:2}).then(canvas=>{
+    const a=document.createElement("a");
+    a.download=`동래옥_직원스케줄_${isoDate(scheduleWeekStart)}.png`;
+    a.href=canvas.toDataURL("image/png");
+    a.click();
+  });
+}
+
+</script>
 
 <style>
 *{box-sizing:border-box}
@@ -46,6 +194,13 @@ body{
   gap:10px;
   margin-bottom:14px;
 }
+.nav-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  flex-wrap:wrap;
+}
 .page-title{
   font-size:21px;
   font-weight:800;
@@ -82,11 +237,23 @@ body{
 .section-title{
   font-size:15px;
   font-weight:800;
-  color:#9f1e1e;
   margin:20px 2px 8px;
-  padding-bottom:7px;
-  border-bottom:2px solid #f0d3d3;
+  padding:8px 10px;
+  border-radius:10px;
 }
+.group-brown{background:#f3e2cf;color:#6f431f;border:1px solid #dfc19f}
+.group-red{background:#fde7e7;color:#9e2f2f;border:1px solid #efc2c2}
+.group-gold{background:#fff4d8;color:#8a6515;border:1px solid #ead58f}
+.group-green{background:#e7f4e9;color:#2d6c3d;border:1px solid #bddcc4}
+.group-blue{background:#e7f0fb;color:#2e5d8c;border:1px solid #bfd3ec}
+.group-purple{background:#efe7f7;color:#654083;border:1px solid #d8c2e8}
+
+.item.group-brown-row{background:#fbf5ee}
+.item.group-red-row{background:#fff6f6}
+.item.group-gold-row{background:#fffaf0}
+.item.group-green-row{background:#f4fbf5}
+.item.group-blue-row{background:#f4f8fd}
+.item.group-purple-row{background:#faf6fd}
 .item{
   display:flex;
   align-items:center;
@@ -149,25 +316,79 @@ body{
 .action-btn.secondary{background:#333}
 #sheet{
   background:#fff;
-  padding:25px;
+  padding:28px;
   margin-top:20px;
-  border:2px solid #ddd;
-  border-radius:12px;
+  border:2px solid #d7d7d7;
+  border-radius:16px;
+  box-shadow:0 5px 18px rgba(0,0,0,.06);
 }
-#sheet h2,#sheet h3{text-align:center}
-#sheetTitle{margin-top:4px}
-.row{
+#sheet h2{
+  text-align:center;
+  margin:0;
+  font-size:25px;
+  letter-spacing:-.5px;
+}
+#sheet h3{
+  text-align:center;
+  margin:7px 0 4px;
+  font-size:21px;
+  color:#a51f1f;
+}
+#dateTxt{
+  text-align:center;
+  margin:8px 0 20px;
+  color:#555;
+  font-size:15px;
+  font-weight:700;
+}
+.sheet-summary{
   display:flex;
   justify-content:space-between;
+  align-items:center;
+  background:#f5f6f8;
+  border-radius:10px;
+  padding:10px 13px;
+  margin-bottom:14px;
+  font-size:14px;
+  font-weight:800;
+}
+.row{
+  display:grid;
+  grid-template-columns:1fr auto;
+  align-items:center;
   gap:20px;
-  padding:8px 0;
-  border-bottom:1px dashed #ccc;
+  min-height:44px;
+  padding:10px 12px;
+  border-bottom:1px solid #e5e5e5;
+  font-size:17px;
+}
+.row:nth-child(even){
+  background:#fafafa;
+}
+.row span{
+  font-weight:650;
+}
+.row b{
+  min-width:76px;
+  text-align:right;
+  font-size:18px;
+  color:#111;
 }
 .sheet-section{
-  margin-top:16px;
+  margin-top:18px;
+  padding:9px 12px;
+  border-radius:9px;
   font-size:17px;
-  font-weight:800;
-  color:#a51f1f;
+  font-weight:900;
+  color:#fff;
+  background:#7c5140;
+  letter-spacing:-.2px;
+}
+.sheet-empty{
+  text-align:center;
+  padding:30px 10px;
+  color:#777;
+  font-weight:700;
 }
 .hidden{display:none!important}
 
@@ -175,38 +396,137 @@ body{
   body{padding:8px}
   .card{padding:14px;border-radius:14px}
   .logo img{width:330px;max-width:96%}
-  .page-title{font-size:18px}
-  .nav-btn,.back-btn{padding:9px 11px;font-size:14px}
+  .topbar{align-items:flex-start}
+  .page-title{font-size:18px;padding-top:8px}
+  .nav-actions{gap:5px}
+  .nav-btn,.back-btn{padding:8px 9px;font-size:13px}
   .item{padding:9px 11px}
   .item-name{font-size:15px}
   .circle-btn{width:31px;height:31px;line-height:31px;font-size:18px}
   .count{width:28px;font-size:17px}
 }
 
-html, body, button, .item, .controls {
-  touch-action: manipulation;
+/* 통합 관리 시스템 */
+.app-shell{max-width:980px;margin:auto}
+.screen{display:none}
+.screen.active{display:block}
+.home-card{
+  max-width:700px;margin:auto;background:#fff;padding:22px;border-radius:18px;
+  box-shadow:0 8px 24px rgba(0,0,0,.08)
+}
+.home-title{text-align:center;font-size:24px;font-weight:900;margin:4px 0 6px}
+.home-subtitle{text-align:center;color:#666;margin:0 0 22px}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.menu-card{
+  border:none;border-radius:18px;padding:24px 16px;background:#fafafa;
+  box-shadow:0 3px 12px rgba(0,0,0,.07);cursor:pointer;text-align:left;
+  transition:transform .15s,box-shadow .15s
+}
+.menu-card:active{transform:scale(.97)}
+.menu-icon{font-size:34px;margin-bottom:10px}
+.menu-name{font-size:21px;font-weight:900}
+.menu-desc{font-size:14px;color:#666;margin-top:5px;line-height:1.45}
+.home-back{
+  border:none;border-radius:12px;padding:9px 13px;background:#222;color:#fff;
+  font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px
 }
 
-.circle-btn {
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-  touch-action: manipulation;
+/* 스케줄 */
+.schedule-card{
+  max-width:980px;margin:auto;background:#fff;padding:20px;border-radius:18px;
+  box-shadow:0 8px 24px rgba(0,0,0,.08)
+}
+.schedule-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.schedule-title{font-size:22px;font-weight:900}
+.week-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.week-btn{
+  border:none;border-radius:10px;padding:9px 11px;background:#222;color:#fff;
+  font-size:14px;font-weight:800;cursor:pointer
+}
+#weekLabel{font-weight:900;background:#f3f4f6;padding:9px 12px;border-radius:10px}
+.schedule-tools{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.tool-btn{
+  border:none;border-radius:11px;padding:10px 13px;color:#fff;font-weight:800;
+  cursor:pointer;font-size:14px
+}
+.tool-add{background:#2f6f48}.tool-save{background:#b22222}.tool-image{background:#333}.tool-clear{background:#777}
+.schedule-scroll{overflow-x:auto;border:1px solid #e1e3e8;border-radius:14px}
+.schedule-table{border-collapse:separate;border-spacing:0;min-width:940px;width:100%;background:#fff}
+.schedule-table th,.schedule-table td{border-right:1px solid #e4e6eb;border-bottom:1px solid #e4e6eb;padding:8px;text-align:center}
+.schedule-table th{background:#f4f5f7;font-size:14px;position:sticky;top:0;z-index:2}
+.schedule-table th:first-child,.schedule-table td:first-child{position:sticky;left:0;z-index:3;background:#fff}
+.schedule-table th:first-child{background:#eceef2;z-index:4}
+.day-sat{color:#2366b1}.day-sun{color:#c73535}
+.employee-cell{min-width:130px}
+.employee-name{
+  width:95px;border:1px solid #d5d8df;border-radius:9px;padding:8px;font-size:15px;
+  font-weight:800;text-align:center
+}
+.remove-employee{
+  width:26px;height:26px;border:none;border-radius:50%;background:#eee;color:#777;
+  cursor:pointer;margin-left:4px;font-weight:900
+}
+.shift-input{
+  width:96px;border:1px solid #d6d9df;border-radius:9px;padding:8px 6px;
+  font-size:14px;text-align:center;background:#fff
+}
+.shift-input:focus{outline:2px solid #e8b5b5;border-color:#b22222}
+.schedule-note{font-size:13px;color:#666;margin-top:10px}
+.save-status{font-size:14px;font-weight:800;color:#2f6f48;margin-left:auto}
+#scheduleCapture{background:#fff;padding:4px}
+
+@media(max-width:520px){
+  .menu-grid{grid-template-columns:1fr}
+  .menu-card{padding:20px 16px}
+  .schedule-card{padding:12px;border-radius:14px}
+  .schedule-head{align-items:flex-start;flex-direction:column}
+  .schedule-title{font-size:20px}
+  .week-controls{width:100%}
+  #weekLabel{flex:1;text-align:center;font-size:13px}
 }
 
 </style>
 </head>
 
 <body>
+
+<div class="app-shell">
+  <div id="homeScreen" class="screen active">
+    <div class="home-card">
+      <div class="logo">
+        <img src="logo_clean.png" alt="동래옥">
+      </div>
+      <div class="home-title">동래옥 통합 관리 시스템</div>
+      <p class="home-subtitle">원하는 메뉴를 선택하세요.</p>
+      <div class="menu-grid">
+        <button class="menu-card" type="button" onclick="showOrder()">
+          <div class="menu-icon">📦</div>
+          <div class="menu-name">발주</div>
+          <div class="menu-desc">주방·홀·야채 품목을 선택하고 발주서 이미지를 생성합니다.</div>
+        </button>
+        <button class="menu-card" type="button" onclick="showSchedule()">
+          <div class="menu-icon">📅</div>
+          <div class="menu-name">스케줄</div>
+          <div class="menu-desc">직원별 주간 근무시간을 작성하고 휴대폰에 저장합니다.</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+<div id="orderScreen" class="screen">
 <div class="card">
+<button class="home-back" type="button" onclick="showHome()">← 메인 메뉴</button>
   <div class="logo">
     <img src="logo_clean.png" alt="동래옥">
   </div>
 
   <div class="topbar">
-    <button id="backBtn" class="nav-btn hidden" type="button" onclick="goKitchen()">← 주방 발주</button>
     <div id="pageTitle" class="page-title">주방 발주</div>
-    <button id="hallBtn" class="nav-btn" type="button" onclick="goHall()">→ 홀 발주</button>
+    <div class="nav-actions">
+      <button id="backBtn" class="nav-btn hidden" type="button" onclick="goKitchen()">← 주방 발주</button>
+      <button id="hallBtn" class="nav-btn" type="button" onclick="goHall()">→ 홀 발주</button>
+      <button id="vegetableBtn" class="nav-btn" type="button" onclick="goVegetable()">→ 야채 발주</button>
+    </div>
   </div>
 
   <div class="date-row">
@@ -223,6 +543,10 @@ html, body, button, .item, .controls {
     <h2>동래옥 진접본점</h2>
     <h3 id="sheetTitle">주방 발주서</h3>
     <p id="dateTxt"></p>
+    <div id="sheetSummary" class="sheet-summary">
+      <span>선택 품목</span>
+      <strong id="sheetItemCount">0개</strong>
+    </div>
     <div id="list"></div>
     <p style="text-align:center;margin-top:20px">감사합니다.</p>
   </div>
@@ -233,14 +557,64 @@ const pages = {
   kitchen: {
     title: "주방 발주",
     sheetTitle: "주방 발주서",
-    items: [
-      ["토종순대","박스"],["백순대","박스"],["찰순대","박스"],
-      ["돼지머리(탕용)","박스"],["돼지머리(수육용)","박스"],
-      ["다대기","박스"],["사골육수","박스"],["갈비탕","박스"],
-      ["낙지볶음","박스"],["편육","박스"],["돈가스","박스"],
-      ["소곱창 전골","박스"],["소고기 곰탕","박스"],["순살족발","박스"],
-      ["함박","박스"],["우삼겹","박스"],["겉절이 김치","박스"],
-      ["돼지곱창","박스"],["오소리","박스"]
+    sections: [
+      {
+        name: "머리고기류",
+        color: "group-red",
+        rowColor: "group-red-row",
+        items: [
+          ["돼지머리(탕용)","박스"],["돼지머리(수육용)","박스"]
+        ]
+      },
+      {
+        name: "순대류",
+        color: "group-brown",
+        rowColor: "group-brown-row",
+        items: [
+          ["토종순대","박스"],["백순대","박스"],["찰순대","박스"]
+        ]
+      },
+      {
+        name: "기본 조리 품목",
+        color: "group-gold",
+        rowColor: "group-gold-row",
+        items: [
+          ["다대기","박스"],["사골육수","박스"],["낙지볶음","박스"],
+          ["편육","박스"],["돈가스","박스"],["순살족발","박스"]
+        ]
+      },
+      {
+        name: "냉동 육류",
+        color: "group-green",
+        rowColor: "group-green-row",
+        items: [
+          ["우삼겹","박스"],["함박","박스"]
+        ]
+      },
+      {
+        name: "탕·전골",
+        color: "group-blue",
+        rowColor: "group-blue-row",
+        items: [
+          ["소고기 곰탕","박스"],["소곱창 전골","박스"]
+        ]
+      },
+      {
+        name: "김치",
+        color: "group-purple",
+        rowColor: "group-purple-row",
+        items: [
+          ["겉절이 김치","박스"]
+        ]
+      },
+      {
+        name: "내장류",
+        color: "group-red",
+        rowColor: "group-red-row",
+        items: [
+          ["돼지곱창","박스"],["오소리","박스"]
+        ]
+      }
     ]
   },
   hall: {
@@ -257,33 +631,55 @@ const pages = {
       {
         name: "소스류",
         items: [
-          ["참소스","개"],["돈가스 소스","개"]
+          ["참소스","박스"],["돈가스 소스","박스"]
         ]
       },
       {
         name: "홀 메인 품목",
         items: [
-          ["종이컵","개"],["물티슈","개"],["테이블 냅킨","개"],["점보롤","개"],
-          ["두루마리 휴지","개"],["키친타올","개"],["쌈장","개"],["단무지","개"],
-          ["옥수수 콘샐러드","개"],["후추","개"],["머스타드","개"],["데리야끼","개"],
-          ["새우젓","개"],["커피믹스","개"],["들깨가루","개"],["원두커피","개"]
+          ["종이컵","박스"],["물티슈","박스"],["테이블 냅킨","박스"],["점보롤","박스"],
+          ["두루마리 휴지","박스"],["키친타올","박스"],["쌈장","박스"],["단무지","개"],
+          ["옥수수 콘샐러드","봉지"],["후추","봉지"],["머스타드","봉지"],["데리야끼","봉지"],
+          ["새우젓","통"],["커피믹스","봉지"],["들깨가루","봉지"],["원두커피","봉지"]
         ]
       },
       {
         name: "포장용기",
         items: [
-          ["두칸실링","개"],["깍두기용기 (95)","개"],["소스용기 (70)","개"],
-          ["육수용기 500ml","개"],["들깨 포장봉지","개"],["포장봉투(중)","개"],
-          ["포장봉투(소)","개"],["탕용기","개"]
+          ["두칸실링","박스"],["깍두기용기 (95)","박스"],["소스용기 (70)","박스"],
+          ["육수용기 500ml","박스"],["들깨 포장봉지","박스"],["포장봉투(중)","박스"],
+          ["포장봉투(소)","박스"],["탕용기","박스"]
         ]
       },
       {
         name: "주방용품",
         items: [
-          ["식기세척기 세제","개"],["식기세척기 린스","개"],["초음파 세척세제","개"],
-          ["트리오","개"],["라텍스 장갑(대)","개"],["라텍스 장갑(중)","개"],
+          ["식기세척기 세제","통"],["식기세척기 린스","통"],["초음파 세척세제","통"],
+          ["트리오","통"],["라텍스 장갑(대)","박스"],["라텍스 장갑(중)","박스"],
           ["고무장갑(소)","개"],["고무장갑(대)","개"],["크린랩 30X40","개"],
-          ["파란봉투 70L","개"]
+          ["파란봉투 70L","묶음"]
+        ]
+      }
+    ]
+  },
+  vegetable: {
+    title: "야채 발주",
+    sheetTitle: "야채 발주서",
+    sections: [
+      {
+        name: "야채·식재료",
+        items: [
+          ["부추","박스"],["양파","망"],["대파","단"],["숙주","박스"],
+          ["청경채","박스"],["팽이버섯","박스"],["청양고추","박스"],["단호박","박스"],
+          ["쑥갓","봉지"],["깻잎","봉지"],["마늘","봉지"],["깍두기","박스"],
+          ["초장","통"],["고추기름","통"]
+        ]
+      },
+      {
+        name: "주류·기타",
+        items: [
+          ["장수 막걸리","개"],["지평 막걸리","개"],
+          ["쓰레기 봉투(75)","묶음"],["담금주","개"]
         ]
       }
     ]
@@ -291,7 +687,7 @@ const pages = {
 };
 
 let currentPage = "kitchen";
-const quantities = { kitchen:{}, hall:{} };
+const quantities = { kitchen:{}, hall:{}, vegetable:{} };
 
 function getFlatItems(pageKey){
   const page = pages[pageKey];
@@ -312,8 +708,10 @@ function renderPage(){
 
   const back=document.getElementById("backBtn");
   const hall=document.getElementById("hallBtn");
+  const vegetable=document.getElementById("vegetableBtn");
   back.classList.toggle("hidden",currentPage==="kitchen");
   hall.classList.toggle("hidden",currentPage==="hall");
+  vegetable.classList.toggle("hidden",currentPage==="vegetable");
 
   const wrap=document.getElementById("items");
   wrap.innerHTML="";
@@ -324,20 +722,20 @@ function renderPage(){
     let index=0;
     page.sections.forEach(section=>{
       const title=document.createElement("div");
-      title.className="section-title";
+      title.className="section-title" + (section.color ? " " + section.color : "");
       title.textContent=section.name;
       wrap.appendChild(title);
       section.items.forEach(item=>{
-        wrap.appendChild(createItemRow(item,index));
+        wrap.appendChild(createItemRow(item,index,section.rowColor || ""));
         index++;
       });
     });
   }
 }
 
-function createItemRow(item,index){
+function createItemRow(item,index,rowColor=""){
   const row=document.createElement("div");
-  row.className="item";
+  row.className="item" + (rowColor ? " " + rowColor : "");
   const value=quantities[currentPage][index]||0;
   row.innerHTML=`
     <span class="item-name">${item[0]}</span>
@@ -355,21 +753,34 @@ function changeQty(index,delta){
   document.getElementById(`count-${currentPage}-${index}`).textContent=quantities[currentPage][index];
 }
 
-function goHall(){
-  history.pushState({page:"hall"},"","#hall");
-  currentPage="hall";
+function openPage(pageKey){
+  if(currentPage===pageKey) return;
+  history.pushState({page:pageKey},"","#"+pageKey);
+  currentPage=pageKey;
   renderPage();
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
+function goHall(){
+  openPage("hall");
+}
+
+function goVegetable(){
+  openPage("vegetable");
+}
+
 function goKitchen(){
   if(currentPage!=="kitchen"){
-    history.back();
+    history.pushState({page:"kitchen"},"",location.pathname);
+    currentPage="kitchen";
+    renderPage();
+    window.scrollTo({top:0,behavior:"smooth"});
   }
 }
 
-window.addEventListener("popstate",()=>{
-  currentPage="kitchen";
+window.addEventListener("popstate",(event)=>{
+  const page=event.state && pages[event.state.page] ? event.state.page : "kitchen";
+  currentPage=page;
   renderPage();
   window.scrollTo({top:0,behavior:"smooth"});
 });
@@ -380,16 +791,41 @@ function makeSheet(){
   const list=document.getElementById("list");
   list.innerHTML="";
   document.getElementById("sheetTitle").textContent=page.sheetTitle;
-  document.getElementById("dateTxt").textContent=document.getElementById("d").value;
+
+  const rawDate=document.getElementById("d").value;
+  const formattedDate=rawDate ? rawDate.replaceAll("-",". ") : "";
+  document.getElementById("dateTxt").textContent=formattedDate;
 
   let lastSection=null;
+  let selectedCount=0;
+
   flat.forEach(({item,index,section})=>{
     const q=quantities[currentPage][index]||0;
     if(q<=0) return;
 
+    selectedCount++;
+
     if(section && section!==lastSection){
       const heading=document.createElement("div");
       heading.className="sheet-section";
+
+      const colors={
+        "머리고기류":"#b23a3a",
+        "순대류":"#7a5230",
+        "기본 조리 품목":"#b8860b",
+        "냉동 육류":"#2e8b57",
+        "탕·전골":"#2f6fb3",
+        "김치":"#7b57b5",
+        "내장류":"#a03d3d",
+        "주류":"#2f6fb3",
+        "소스류":"#9b6b30",
+        "홀 메인 품목":"#2e8b57",
+        "포장용기":"#8a5a44",
+        "주방용품":"#616161",
+        "야채·식재료":"#3d8b52",
+        "주류·기타":"#8a5a44"
+      };
+      heading.style.background=colors[section]||"#7c5140";
       heading.textContent=section;
       list.appendChild(heading);
       lastSection=section;
@@ -397,9 +833,18 @@ function makeSheet(){
 
     const row=document.createElement("div");
     row.className="row";
-    row.innerHTML=`<span>✔ ${item[0]}</span><b>${q}${item[1]}</b>`;
+    row.innerHTML=`<span>${item[0]}</span><b>${q}${item[1]}</b>`;
     list.appendChild(row);
   });
+
+  document.getElementById("sheetItemCount").textContent=selectedCount+"개";
+
+  if(selectedCount===0){
+    const empty=document.createElement("div");
+    empty.className="sheet-empty";
+    empty.textContent="선택된 발주 품목이 없습니다.";
+    list.appendChild(empty);
+  }
 }
 
 function saveImg(){
@@ -413,7 +858,43 @@ function saveImg(){
 }
 
 document.getElementById("d").value=new Date().toISOString().slice(0,10);
+history.replaceState({page:"kitchen"},"",location.pathname);
 renderPage();
 </script>
+</div>
+
+  <div id="scheduleScreen" class="screen">
+    <div class="schedule-card">
+      <button class="home-back" type="button" onclick="showHome()">← 메인 메뉴</button>
+      <div class="schedule-head">
+        <div class="schedule-title">직원 주간 스케줄</div>
+        <div class="week-controls">
+          <button class="week-btn" type="button" onclick="moveWeek(-1)">← 이전 주</button>
+          <div id="weekLabel"></div>
+          <button class="week-btn" type="button" onclick="moveWeek(1)">다음 주 →</button>
+        </div>
+      </div>
+
+      <div class="schedule-tools">
+        <button class="tool-btn tool-add" type="button" onclick="addEmployee()">+ 직원 추가</button>
+        <button class="tool-btn tool-save" type="button" onclick="saveSchedule()">스케줄 저장</button>
+        <button class="tool-btn tool-image" type="button" onclick="saveScheduleImage()">이미지 저장</button>
+        <button class="tool-btn tool-clear" type="button" onclick="clearSchedule()">이번 주 초기화</button>
+        <span id="saveStatus" class="save-status"></span>
+      </div>
+
+      <div id="scheduleCapture">
+        <div class="schedule-scroll">
+          <table class="schedule-table">
+            <thead id="scheduleHead"></thead>
+            <tbody id="scheduleBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="schedule-note">근무시간 칸에는 예: 10:00-22:00, 오전, 야간, 휴무처럼 자유롭게 입력할 수 있습니다.</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
