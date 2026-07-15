@@ -8,15 +8,22 @@
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
 (function(){
-let last=0;
-document.addEventListener('touchend',function(e){
-const now=Date.now();
-if(now-last<300)e.preventDefault();
-last=now;
-},{passive:false});
-document.addEventListener('gesturestart',function(e){e.preventDefault();},{passive:false});
+  let lastTouchEnd = 0;
+
+  document.addEventListener("touchend", function(e){
+    const now = Date.now();
+    if(now - lastTouchEnd <= 300){
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, {passive:false});
+
+  document.addEventListener("gesturestart", function(e){
+    e.preventDefault();
+  }, {passive:false});
 })();
 </script>
 <script>
@@ -96,7 +103,7 @@ function renderSchedule(){
     for(let day=0;day<7;day++){
       {
         const current=(emp.shifts[day]||"휴무").trim()||"휴무";
-        const cls=current==="휴무"?"shift-off":"shift-work";
+        const cls=getShiftClass(current);
         cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(current)}"
           onfocus="this.select()"
           oninput="updateShift(${empIndex},${day},this)"
@@ -111,10 +118,18 @@ function escapeHtml(value){
   return String(value).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 function updateEmployeeName(i,value){ scheduleEmployees[i].name=value; markUnsaved(); }
+function getShiftClass(value){
+  const normalized=String(value||"").trim();
+
+  if(normalized===""||normalized==="휴무") return "shift-off";
+  if(normalized==="오전") return "shift-morning";
+  if(normalized==="오후") return "shift-afternoon";
+  return "shift-work";
+}
+
 function applyShiftStyle(input){
-  const value=input.value.trim();
-  input.classList.toggle("shift-off",value===""||value==="휴무");
-  input.classList.toggle("shift-work",value!==""&&value!=="휴무");
+  input.classList.remove("shift-off","shift-morning","shift-afternoon","shift-work");
+  input.classList.add(getShiftClass(input.value));
 }
 function updateShift(i,d,input){
   const value=input.value.trim();
@@ -161,7 +176,7 @@ function renderScheduleWithoutReload(){
     for(let day=0;day<7;day++){
       {
         const current=(emp.shifts[day]||"휴무").trim()||"휴무";
-        const cls=current==="휴무"?"shift-off":"shift-work";
+        const cls=getShiftClass(current);
         cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(current)}"
           onfocus="this.select()"
           oninput="updateShift(${empIndex},${day},this)"
@@ -552,6 +567,16 @@ body{
   color:#b42323;
   border-color:#efb6b6;
 }
+.shift-morning{
+  background:#ffe3bd;
+  color:#ad5b00;
+  border-color:#f0b96d;
+}
+.shift-afternoon{
+  background:#fff3a8;
+  color:#7d6500;
+  border-color:#dec85b;
+}
 .shift-work{
   background:#e7f0ff;
   color:#1859a8;
@@ -589,6 +614,27 @@ touch-action:manipulation;
 user-select:none;
 }
 input[type="text"],input[type="date"]{font-size:16px;}
+
+
+/* 확대 및 더블탭 방지: iPhone Safari + Android Chrome */
+html,body{
+  touch-action:manipulation;
+  overscroll-behavior:none;
+}
+button,.menu-card,.home-card,.card,.schedule-card,
+.item,.controls,.circle-btn,.nav-btn,.back-btn,.home-back,
+.tool-btn,.week-btn,.action-btn,.topbar,.nav-actions{
+  touch-action:manipulation;
+  -ms-touch-action:manipulation;
+  -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;
+  user-select:none;
+}
+input,select,textarea{
+  touch-action:manipulation;
+  font-size:16px;
+}
 
 </style>
 </head>
@@ -776,7 +822,7 @@ const pages = {
         items: [
           ["부추","박스"],["양파","망"],["대파","단"],["숙주","박스"],
           ["청경채","박스"],["팽이버섯","박스"],["청양고추","박스"],["단호박","박스"],
-          ["쑥갓","봉지"],["깻잎","봉지"],["마늘","봉지"],["깍두기","박스"],
+          ["쑥갓","봉지"],["깻잎","봉지"],["마늘","봉지"],
           ["초장","통"],["고추기름","통"]
         ]
       },
@@ -1007,7 +1053,7 @@ renderPage();
           </table>
         </div>
       </div>
-      <div class="schedule-note">기본값은 휴무(빨간색)입니다. 칸에 직원의 출근 표시나 메모를 입력하면 파란색으로 바뀝니다.</div>
+      <div class="schedule-note">휴무는 빨간색, 오전은 주황색, 오후는 노란색이며 그 외 입력은 파란색으로 표시됩니다.</div>
     </div>
   </div>
 </div>
