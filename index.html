@@ -154,18 +154,39 @@ function attachScheduleListener(){
   const ref=db.ref(cloudSchedulePath());
   scheduleListenerRef=ref;
 
-  ref.on("value",snap=>{
+  ref.on("value",async snap=>{
     if(scheduleLocalEditing) return;
 
     const value=snap.val();
-    if(value && Array.isArray(value.employees)){
-      scheduleEmployees=value.employees;
+
+    if(value && value.employees){
+      scheduleEmployees=Array.isArray(value.employees)
+        ? value.employees
+        : Object.keys(value.employees)
+            .sort((a,b)=>Number(a)-Number(b))
+            .map(key=>value.employees[key]);
+
       normalizeEmployees();
       localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
-    }else{
-      loadSchedule();
+      renderScheduleWithoutReload();
+      return;
     }
+
+    // 클라우드에 해당 주 데이터가 없으면 현재 기기의 기존 저장 데이터를 자동 업로드
+    loadSchedule();
+    normalizeEmployees();
     renderScheduleWithoutReload();
+
+    try{
+      await ref.set({
+        employees:scheduleEmployees,
+        updatedAt:firebase.database.ServerValue.TIMESTAMP
+      });
+      const status=document.getElementById("saveStatus");
+      if(status) status.textContent="기존 스케줄 클라우드 업로드 완료";
+    }catch(error){
+      console.error("기존 스케줄 자동 업로드 실패:",error);
+    }
   },error=>{
     console.error("스케줄 불러오기 실패:",error);
     loadSchedule();
@@ -289,7 +310,13 @@ async function copyPreviousWeek(){
     try{
       const snap=await db.ref(cloudSchedulePath(previous)).once("value");
       const value=snap.val();
-      if(value && Array.isArray(value.employees)) copied=value.employees;
+      if(value && value.employees){
+        copied=Array.isArray(value.employees)
+          ? value.employees
+          : Object.keys(value.employees)
+              .sort((a,b)=>Number(a)-Number(b))
+              .map(key=>value.employees[key]);
+      }
     }catch(error){
       console.error("저번주 클라우드 불러오기 실패:",error);
     }
@@ -1239,7 +1266,7 @@ attachOrderSync();
       <div class="schedule-tools">
         <button class="tool-btn tool-add" type="button" onclick="addEmployee()">+ 직원 추가</button>
         <button class="tool-btn tool-add" type="button" onclick="copyPreviousWeek()">저번주 불러오기</button>
-        <button class="tool-btn tool-save" type="button" onclick="saveSchedule()">스케줄 저장</button>
+        <button class="tool-btn tool-save" type="button" onclick="saveSchedule()">스케줄 저장·동기화</button>
         <button class="tool-btn tool-image" type="button" onclick="saveScheduleImage()">이미지 저장</button>
         <button class="tool-btn tool-clear" type="button" onclick="clearSchedule()">이번 주 초기화</button>
         <span id="saveStatus" class="save-status"></span>
