@@ -44,14 +44,18 @@ function displayDate(date){
 function weekKey(){ return "dongrae_schedule_"+isoDate(scheduleWeekStart); }
 function defaultEmployees(){
   return [
-    {name:"직원 1",shifts:["","","","","","",""]},
-    {name:"직원 2",shifts:["","","","","","",""]}
+    {name:"직원 1",shifts:["휴무","휴무","휴무","휴무","휴무","휴무","휴무"]},
+    {name:"직원 2",shifts:["휴무","휴무","휴무","휴무","휴무","휴무","휴무"]}
   ];
 }
 function loadSchedule(){
   try{
     const saved=localStorage.getItem(weekKey());
     scheduleEmployees=saved?JSON.parse(saved):defaultEmployees();
+    scheduleEmployees.forEach(emp=>{
+      emp.shifts=(emp.shifts||[]).map(v=>String(v||"").trim()||"휴무");
+      while(emp.shifts.length<7) emp.shifts.push("휴무");
+    });
   }catch(e){ scheduleEmployees=defaultEmployees(); }
 }
 function renderSchedule(){
@@ -80,7 +84,14 @@ function renderSchedule(){
       <button class="remove-employee" type="button" onclick="removeEmployee(${empIndex})">×</button>
     </td>`;
     for(let day=0;day<7;day++){
-      cells+=`<td><input class="shift-input" placeholder="휴무" value="${escapeHtml(emp.shifts[day]||"")}" oninput="updateShift(${empIndex},${day},this.value)"></td>`;
+      {
+        const current=(emp.shifts[day]||"휴무").trim()||"휴무";
+        const cls=current==="휴무"?"shift-off":"shift-work";
+        cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(current)}"
+          onfocus="this.select()"
+          oninput="updateShift(${empIndex},${day},this)"
+          onblur="normalizeShift(${empIndex},${day},this)"></td>`;
+      }
     }
     tr.innerHTML=cells;
     body.appendChild(tr);
@@ -90,9 +101,26 @@ function escapeHtml(value){
   return String(value).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 function updateEmployeeName(i,value){ scheduleEmployees[i].name=value; markUnsaved(); }
-function updateShift(i,d,value){ scheduleEmployees[i].shifts[d]=value; markUnsaved(); }
+function applyShiftStyle(input){
+  const value=input.value.trim();
+  input.classList.toggle("shift-off",value===""||value==="휴무");
+  input.classList.toggle("shift-work",value!==""&&value!=="휴무");
+}
+function updateShift(i,d,input){
+  const value=input.value.trim();
+  scheduleEmployees[i].shifts[d]=value;
+  applyShiftStyle(input);
+  markUnsaved();
+}
+function normalizeShift(i,d,input){
+  if(input.value.trim()===""){
+    input.value="휴무";
+    scheduleEmployees[i].shifts[d]="휴무";
+  }
+  applyShiftStyle(input);
+}
 function addEmployee(){
-  scheduleEmployees.push({name:`직원 ${scheduleEmployees.length+1}`,shifts:["","","","","","",""]});
+  scheduleEmployees.push({name:`직원 ${scheduleEmployees.length+1}`,shifts:["휴무","휴무","휴무","휴무","휴무","휴무","휴무"]});
   renderScheduleWithoutReload();
   markUnsaved();
 }
@@ -121,11 +149,46 @@ function renderScheduleWithoutReload(){
     const tr=document.createElement("tr");
     let cells=`<td class="employee-cell"><input class="employee-name" value="${escapeHtml(emp.name)}" oninput="updateEmployeeName(${empIndex},this.value)"><button class="remove-employee" type="button" onclick="removeEmployee(${empIndex})">×</button></td>`;
     for(let day=0;day<7;day++){
-      cells+=`<td><input class="shift-input" placeholder="휴무" value="${escapeHtml(emp.shifts[day]||"")}" oninput="updateShift(${empIndex},${day},this.value)"></td>`;
+      {
+        const current=(emp.shifts[day]||"휴무").trim()||"휴무";
+        const cls=current==="휴무"?"shift-off":"shift-work";
+        cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(current)}"
+          onfocus="this.select()"
+          oninput="updateShift(${empIndex},${day},this)"
+          onblur="normalizeShift(${empIndex},${day},this)"></td>`;
+      }
     }
     tr.innerHTML=cells; body.appendChild(tr);
   });
 }
+function copyPreviousWeek(){
+  const previous=new Date(scheduleWeekStart);
+  previous.setDate(previous.getDate()-7);
+  const key="dongrae_schedule_"+isoDate(previous);
+  const saved=localStorage.getItem(key);
+
+  if(!saved){
+    alert("저번 주에 저장된 스케줄이 없습니다.");
+    return;
+  }
+  if(!confirm("저번 주 직원과 출근/휴무 내용을 이번 주로 그대로 불러올까요?")) return;
+
+  try{
+    const copied=JSON.parse(saved);
+    scheduleEmployees=copied.map(emp=>({
+      name:emp.name||"직원",
+      shifts:(emp.shifts||[]).map(v=>String(v||"").trim()||"휴무")
+    }));
+    scheduleEmployees.forEach(emp=>{
+      while(emp.shifts.length<7) emp.shifts.push("휴무");
+    });
+    renderScheduleWithoutReload();
+    markUnsaved();
+  }catch(e){
+    alert("저번 주 스케줄을 불러오지 못했습니다.");
+  }
+}
+
 function saveSchedule(){
   localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
   const status=document.getElementById("saveStatus");
@@ -469,9 +532,23 @@ body{
 }
 .shift-input{
   width:96px;border:1px solid #d6d9df;border-radius:9px;padding:8px 6px;
-  font-size:14px;text-align:center;background:#fff
+  font-size:14px;text-align:center;font-weight:800;
+  transition:background .15s,color .15s,border-color .15s
 }
-.shift-input:focus{outline:2px solid #e8b5b5;border-color:#b22222}
+.shift-off{
+  background:#fde8e8;
+  color:#b42323;
+  border-color:#efb6b6;
+}
+.shift-work{
+  background:#e7f0ff;
+  color:#1859a8;
+  border-color:#aac7ee;
+}
+.shift-input:focus{
+  outline:2px solid rgba(45,105,180,.18);
+  border-color:#2d69b4;
+}
 .schedule-note{font-size:13px;color:#666;margin-top:10px}
 .save-status{font-size:14px;font-weight:800;color:#2f6f48;margin-left:auto}
 #scheduleCapture{background:#fff;padding:4px}
@@ -878,6 +955,7 @@ renderPage();
 
       <div class="schedule-tools">
         <button class="tool-btn tool-add" type="button" onclick="addEmployee()">+ 직원 추가</button>
+        <button class="tool-btn tool-add" type="button" onclick="copyPreviousWeek()">저번주 불러오기</button>
         <button class="tool-btn tool-save" type="button" onclick="saveSchedule()">스케줄 저장</button>
         <button class="tool-btn tool-image" type="button" onclick="saveScheduleImage()">이미지 저장</button>
         <button class="tool-btn tool-clear" type="button" onclick="clearSchedule()">이번 주 초기화</button>
@@ -892,7 +970,7 @@ renderPage();
           </table>
         </div>
       </div>
-      <div class="schedule-note">근무시간 칸에는 예: 10:00-22:00, 오전, 야간, 휴무처럼 자유롭게 입력할 수 있습니다.</div>
+      <div class="schedule-note">기본값은 휴무(빨간색)입니다. 칸에 직원의 출근 표시나 메모를 입력하면 파란색으로 바뀝니다.</div>
     </div>
   </div>
 </div>
