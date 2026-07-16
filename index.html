@@ -98,7 +98,7 @@ async function loginDongrae(){
   }
 
   button.disabled=true;
-  button.textContent="로그인 중...";
+  button.textContent=currentLanguage==="vi"?"Đang đăng nhập...":"로그인 중...";
 
   try{
     await auth.signInWithEmailAndPassword(email,password);
@@ -108,7 +108,7 @@ async function loginDongrae(){
     errorEl.textContent=friendlyAuthError(error);
   }finally{
     button.disabled=false;
-    button.textContent="로그인";
+    button.textContent=t("login");
   }
 }
 
@@ -181,7 +181,7 @@ function showSchedule(){
   if(!requireLogin()) return;
 
   if(!isOwner()){
-    denyAccess("접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.");
+    denyAccess(t("accessDenied"));
     return;
   }
 
@@ -192,6 +192,7 @@ function showSchedule(){
 /* 직원 스케줄 */
 let scheduleWeekStart = getMonday(new Date());
 let scheduleEmployees = [];
+let dispatchEmployees = [];
 let scheduleListenerRef = null;
 let scheduleSaveTimer = null;
 let scheduleLocalEditing = false;
@@ -220,14 +221,29 @@ function defaultEmployees(){
     {name:"직원 2",shifts:["휴무","휴무","휴무","휴무","휴무","휴무","휴무"]}
   ];
 }
+function defaultDispatchEmployees(){
+  return [
+    {name:"파출 1",shifts:["휴무","휴무","휴무","휴무","휴무","휴무","휴무"]}
+  ];
+}
 function loadSchedule(){
   try{
     const cached=localStorage.getItem(weekKey());
+    const dispatchCached=localStorage.getItem(weekKey()+"_dispatch");
     scheduleEmployees=cached?JSON.parse(cached):defaultEmployees();
+    dispatchEmployees=dispatchCached?JSON.parse(dispatchCached):defaultDispatchEmployees();
     normalizeEmployees();
+    normalizeDispatchEmployees();
   }catch(e){
     scheduleEmployees=defaultEmployees();
+    dispatchEmployees=defaultDispatchEmployees();
   }
+}
+function normalizeDispatchEmployees(){
+  dispatchEmployees=(dispatchEmployees||defaultDispatchEmployees()).map(emp=>({
+    name:String(emp.name||"파출"),
+    shifts:Array.from({length:7},(_,i)=>String((emp.shifts||[])[i]||"").trim()||"휴무")
+  }));
 }
 
 function normalizeEmployees(){
@@ -274,6 +290,7 @@ function attachScheduleListener(){
 
       normalizeEmployees();
       localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
+    localStorage.setItem(weekKey()+"_dispatch",JSON.stringify(dispatchEmployees));
       renderScheduleWithoutReload();
       return;
     }
@@ -286,6 +303,7 @@ function attachScheduleListener(){
     try{
       await ref.set({
         employees:scheduleEmployees,
+        dispatchEmployees:dispatchEmployees,
         updatedAt:firebase.database.ServerValue.TIMESTAMP
       });
       const status=document.getElementById("saveStatus");
@@ -307,11 +325,13 @@ function queueScheduleCloudSave(){
   scheduleSaveTimer=setTimeout(async()=>{
     normalizeEmployees();
     localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
+    localStorage.setItem(weekKey()+"_dispatch",JSON.stringify(dispatchEmployees));
 
     if(firebaseReady){
       try{
         await db.ref(cloudSchedulePath()).set({
           employees:scheduleEmployees,
+          dispatchEmployees:dispatchEmployees,
           updatedAt:firebase.database.ServerValue.TIMESTAMP
         });
         const status=document.getElementById("saveStatus");
@@ -335,7 +355,7 @@ function escapeHtml(value){
 }
 function updateEmployeeName(i,value){ scheduleEmployees[i].name=value; markUnsaved(); queueScheduleCloudSave(); }
 function getShiftClass(value){
-  const normalized=String(value||"").trim();
+  const normalized=normalizeShiftValueForStorage(value);
 
   if(normalized===""||normalized==="휴무") return "shift-off";
   if(normalized==="오전") return "shift-morning";
@@ -348,7 +368,7 @@ function applyShiftStyle(input){
   input.classList.add(getShiftClass(input.value));
 }
 function updateShift(i,d,input){
-  const value=input.value.trim();
+  const value=normalizeShiftValueForStorage(input.value);
   scheduleEmployees[i].shifts[d]=value;
   applyShiftStyle(input);
   markUnsaved();
@@ -356,7 +376,7 @@ function updateShift(i,d,input){
 }
 function normalizeShift(i,d,input){
   if(input.value.trim()===""){
-    input.value="휴무";
+    input.value=translateShiftValue("휴무");
     scheduleEmployees[i].shifts[d]="휴무";
   }
   applyShiftStyle(input);
@@ -382,7 +402,7 @@ function renderScheduleWithoutReload(){
   const end=new Date(scheduleWeekStart); end.setDate(end.getDate()+6);
   document.getElementById("weekLabel").textContent=
     `${scheduleWeekStart.getFullYear()}.${scheduleWeekStart.getMonth()+1}.${scheduleWeekStart.getDate()} - ${end.getMonth()+1}.${end.getDate()}`;
-  const days=["월","화","수","목","금","토","일"];
+  const days=currentLanguage==="vi"?["T2","T3","T4","T5","T6","T7","CN"]:["월","화","수","목","금","토","일"];
   let head="<tr><th>직원</th>";
   days.forEach((day,i)=>{
     const d=new Date(scheduleWeekStart); d.setDate(d.getDate()+i);
@@ -391,6 +411,8 @@ function renderScheduleWithoutReload(){
   });
   head+="</tr>";
   document.getElementById("scheduleHead").innerHTML=head;
+  var dispatchHead=document.getElementById("dispatchScheduleHead");
+  if(dispatchHead) dispatchHead.innerHTML=head;
   const body=document.getElementById("scheduleBody"); body.innerHTML="";
   temp.forEach((emp,empIndex)=>{
     const tr=document.createElement("tr");
@@ -399,7 +421,7 @@ function renderScheduleWithoutReload(){
       {
         const current=(emp.shifts[day]||"휴무").trim()||"휴무";
         const cls=getShiftClass(current);
-        cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(current)}"
+        cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(translateShiftValue(current))}"
           onfocus="this.select()"
           oninput="updateShift(${empIndex},${day},this)"
           onblur="normalizeShift(${empIndex},${day},this)"></td>`;
@@ -407,7 +429,66 @@ function renderScheduleWithoutReload(){
     }
     tr.innerHTML=cells; body.appendChild(tr);
   });
+  renderDispatchSchedule();
 }
+
+function renderDispatchSchedule(){
+  const body=document.getElementById("dispatchScheduleBody");
+  if(!body) return;
+  body.innerHTML="";
+  dispatchEmployees.forEach((emp,empIndex)=>{
+    const tr=document.createElement("tr");
+    let cells=`<td class="employee-cell"><input class="employee-name dispatch-name" value="${escapeHtml(emp.name)}" oninput="updateDispatchName(${empIndex},this.value)"><button class="remove-employee" type="button" onclick="removeDispatchEmployee(${empIndex})">×</button></td>`;
+    for(let day=0;day<7;day++){
+      const current=(emp.shifts[day]||"휴무").trim()||"휴무";
+      const cls=getShiftClass(current);
+      cells+=`<td><input class="shift-input ${cls}" value="${escapeHtml(translateShiftValue(current))}"
+        onfocus="this.select()"
+        oninput="updateDispatchShift(${empIndex},${day},this)"
+        onblur="normalizeDispatchShift(${empIndex},${day},this)"></td>`;
+    }
+    tr.innerHTML=cells;
+    body.appendChild(tr);
+  });
+}
+function updateDispatchName(i,value){
+  dispatchEmployees[i].name=value;
+  markUnsaved();
+  queueScheduleCloudSave();
+}
+function updateDispatchShift(i,d,input){
+  dispatchEmployees[i].shifts[d]=normalizeShiftValueForStorage(input.value);
+  applyShiftStyle(input);
+  markUnsaved();
+  queueScheduleCloudSave();
+}
+function normalizeDispatchShift(i,d,input){
+  if(input.value.trim()===""){
+    input.value=translateShiftValue("휴무");
+    dispatchEmployees[i].shifts[d]="휴무";
+  }
+  applyShiftStyle(input);
+  queueScheduleCloudSave();
+}
+function addDispatchEmployee(){
+  if(!isOwner()){ denyAccess("접근 권한이 없습니다."); return; }
+  dispatchEmployees.push({
+    name:`파출 ${dispatchEmployees.length+1}`,
+    shifts:["휴무","휴무","휴무","휴무","휴무","휴무","휴무"]
+  });
+  renderDispatchSchedule();
+  markUnsaved();
+  queueScheduleCloudSave();
+}
+function removeDispatchEmployee(i){
+  if(!isOwner()){ denyAccess("접근 권한이 없습니다."); return; }
+  if(!confirm("이 파출 인원을 삭제할까요?")) return;
+  dispatchEmployees.splice(i,1);
+  renderDispatchSchedule();
+  markUnsaved();
+  queueScheduleCloudSave();
+}
+
 async function copyPreviousWeek(){
   if(!isOwner()){ denyAccess("접근 권한이 없습니다."); return; }
   const previous=new Date(scheduleWeekStart);
@@ -457,11 +538,13 @@ async function saveSchedule(){
   if(!isOwner()){ denyAccess("접근 권한이 없습니다."); return; }
   normalizeEmployees();
   localStorage.setItem(weekKey(),JSON.stringify(scheduleEmployees));
+    localStorage.setItem(weekKey()+"_dispatch",JSON.stringify(dispatchEmployees));
 
   try{
     if(firebaseReady && currentAuthUser){
       await db.ref(cloudSchedulePath()).set({
         employees:scheduleEmployees,
+        dispatchEmployees:dispatchEmployees,
         updatedAt:firebase.database.ServerValue.TIMESTAMP
       });
     }
@@ -487,7 +570,9 @@ async function clearSchedule(){
   if(!confirm("이번 주 스케줄을 모두 초기화할까요?")) return;
 
   scheduleEmployees=defaultEmployees();
+  dispatchEmployees=defaultDispatchEmployees();
   localStorage.removeItem(weekKey());
+  localStorage.removeItem(weekKey()+"_dispatch");
   renderScheduleWithoutReload();
   markUnsaved();
 
@@ -495,6 +580,7 @@ async function clearSchedule(){
     try{
       await db.ref(cloudSchedulePath()).set({
         employees:scheduleEmployees,
+        dispatchEmployees:dispatchEmployees,
         updatedAt:firebase.database.ServerValue.TIMESTAMP
       });
     }catch(error){
@@ -1049,6 +1135,80 @@ button,
   opacity:.72;
 }
 
+
+.schedule-table th{
+  font-size:17px;
+  line-height:1.35;
+  font-weight:900;
+}
+.schedule-table th small{
+  display:block;
+  margin-top:3px;
+  font-size:15px;
+  font-weight:800;
+}
+.dispatch-section{
+  margin-top:24px;
+  padding-top:20px;
+  border-top:3px solid #ece4dc;
+}
+.dispatch-section-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:11px;
+}
+.dispatch-title{
+  font-size:21px;
+  font-weight:900;
+  color:#7a5230;
+}
+.dispatch-subtitle{
+  margin-top:3px;
+  font-size:13px;
+  color:#777;
+  font-weight:700;
+}
+.dispatch-add-btn{background:#8a5a44}
+.dispatch-table th{background:#f7eee8}
+.dispatch-table th:first-child{background:#eee0d6}
+.dispatch-name{
+  border-color:#d8bca9;
+  background:#fffaf6;
+}
+
+
+.language-box{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  margin:10px 0 14px;
+  flex-wrap:wrap;
+}
+.language-label{
+  font-size:13px;
+  font-weight:900;
+  color:#666;
+  margin-right:2px;
+}
+.language-btn{
+  border:1px solid #d4d8df;
+  border-radius:999px;
+  padding:8px 12px;
+  background:#fff;
+  color:#333;
+  font-size:13px;
+  font-weight:900;
+  cursor:pointer;
+}
+.language-btn.active{
+  background:#222;
+  border-color:#222;
+  color:#fff;
+}
+
 </style>
 </head>
 
@@ -1060,19 +1220,19 @@ button,
       <div class="logo">
         <img src="logo_clean.png" alt="동래옥">
       </div>
-      <div class="login-title">동래옥 통합 관리 시스템</div>
-      <p class="login-subtitle">등록된 관리자 계정으로 로그인하세요.</p>
+      <div class="login-title" data-i18n="appTitle">동래옥 통합 관리 시스템</div>
+      <p class="login-subtitle" data-i18n="loginSubtitle">등록된 관리자 계정으로 로그인하세요.</p>
 
       <form onsubmit="event.preventDefault();loginDongrae();">
         <div class="login-field">
-          <label for="loginEmail">이메일</label>
+          <label for="loginEmail" data-i18n="email">이메일</label>
           <input id="loginEmail" type="email" autocomplete="username" inputmode="email" required>
         </div>
         <div class="login-field">
-          <label for="loginPassword">비밀번호</label>
+          <label for="loginPassword" data-i18n="password">비밀번호</label>
           <input id="loginPassword" type="password" autocomplete="current-password" required>
         </div>
-        <button id="loginButton" class="login-button" type="submit">로그인</button>
+        <button id="loginButton" class="login-button" type="submit"><span data-i18n="login">로그인</span></button>
         <div id="loginError" class="login-error"></div>
       </form>
     </div>
@@ -1083,23 +1243,28 @@ button,
       <div class="logo">
         <img src="logo_clean.png" alt="동래옥">
       </div>
-      <div class="home-title">동래옥 통합 관리 시스템</div>
+      <div class="home-title" data-i18n="appTitle">동래옥 통합 관리 시스템</div>
+      <div class="language-box">
+        <span class="language-label" data-i18n="language">언어</span>
+        <button id="langKoBtn" class="language-btn active" type="button" onclick="setLanguage('ko')">한국어</button>
+        <button id="langViBtn" class="language-btn" type="button" onclick="setLanguage('vi')">Tiếng Việt</button>
+      </div>
       <div id="cloudStatus" class="cloud-status offline">🔒 로그인 필요</div>
       <div class="account-bar">
         <span><span id="accountEmail">로그인 계정</span><span id="roleBadge" class="role-badge"></span></span>
-        <button class="logout-btn" type="button" onclick="logoutDongrae()">로그아웃</button>
+        <button class="logout-btn" type="button" onclick="logoutDongrae()"><span data-i18n="logout">로그아웃</span></button>
       </div>
-      <p class="home-subtitle">원하는 메뉴를 선택하세요.</p>
+      <p class="home-subtitle" data-i18n="chooseMenu">원하는 메뉴를 선택하세요.</p>
       <div class="menu-grid">
         <button id="orderMenuButton" class="menu-card" type="button" onclick="showOrder()">
           <div class="menu-icon">📦</div>
-          <div class="menu-name">발주</div>
-          <div class="menu-desc">주방·홀·야채 품목을 선택하고 발주서 이미지를 생성합니다.</div>
+          <div class="menu-name" data-i18n="order">발주</div>
+          <div class="menu-desc" data-i18n="orderDesc">주방·홀·야채 품목을 선택하고 발주서 이미지를 생성합니다.</div>
         </button>
         <button id="scheduleMenuButton" class="menu-card" type="button" onclick="showSchedule()">
           <div class="menu-icon">📅</div>
-          <div class="menu-name">스케줄</div>
-          <div class="menu-desc">직원별 주간 근무시간을 작성하고 휴대폰에 저장합니다.</div>
+          <div class="menu-name" data-i18n="schedule">스케줄</div>
+          <div class="menu-desc" data-i18n="scheduleDesc">직원별 주간 근무시간을 작성하고 휴대폰에 저장합니다.</div>
         </button>
       </div>
     </div>
@@ -1107,8 +1272,8 @@ button,
 
 <div id="orderScreen" class="screen">
 <div class="card">
-<button class="home-back" type="button" onclick="showHome()">← 메인 메뉴</button>
-<button class="logout-btn" style="float:right" type="button" onclick="logoutDongrae()">로그아웃</button>
+<button class="home-back" type="button" onclick="showHome()"><span data-i18n="mainMenu">← 메인 메뉴</span></button>
+<button class="logout-btn" style="float:right" type="button" onclick="logoutDongrae()"><span data-i18n="logout">로그아웃</span></button>
   <div class="logo">
     <img src="logo_clean.png" alt="동래옥">
   </div>
@@ -1123,15 +1288,15 @@ button,
   </div>
 
   <div class="date-row">
-    <label for="d">발주 날짜</label>
+    <label for="d" data-i18n="orderDate">발주 날짜</label>
     <input type="date" id="d">
   </div>
 
   <div id="items"></div>
 
-  <button class="action-btn" onclick="makeSheet()">발주서 만들기</button>
-  <button class="action-btn secondary" onclick="saveImg()">이미지 저장</button>
-  <button class="action-btn reset" onclick="resetCurrentOrder()">현재 발주 초기화</button>
+  <button class="action-btn" onclick="makeSheet()"><span data-i18n="makeSheet">발주서 만들기</span></button>
+  <button class="action-btn secondary" onclick="saveImg()"><span data-i18n="saveImage">이미지 저장</span></button>
+  <button class="action-btn reset" onclick="resetCurrentOrder()"><span data-i18n="resetOrder">현재 발주 초기화</span></button>
 
   <div id="sheet">
     <h2>동래옥 진접본점</h2>
@@ -1394,8 +1559,14 @@ function renderPage(){
   }
 
   const page=pages[currentPage];
-  document.getElementById("pageTitle").textContent=page.title;
-  document.getElementById("sheetTitle").textContent=page.sheetTitle;
+  document.getElementById("pageTitle").textContent=
+    currentLanguage==="vi"
+      ? (currentPage==="kitchen"?t("kitchenOrder"):currentPage==="hall"?t("hallOrder"):t("vegetableOrder"))
+      : page.title;
+  document.getElementById("sheetTitle").textContent=
+    currentLanguage==="vi"
+      ? (currentPage==="kitchen"?t("kitchenOrder"):currentPage==="hall"?t("hallOrder"):t("vegetableOrder"))
+      : page.sheetTitle;
 
   const back=document.getElementById("backBtn");
   const hall=document.getElementById("hallBtn");
@@ -1420,7 +1591,7 @@ function renderPage(){
     page.sections.forEach(section=>{
       const title=document.createElement("div");
       title.className="section-title" + (section.color ? " " + section.color : "");
-      title.textContent=section.name;
+      title.textContent=translateSection(section.name);
       wrap.appendChild(title);
       section.items.forEach(item=>{
         wrap.appendChild(createItemRow(item,index,section.rowColor || ""));
@@ -1435,7 +1606,7 @@ function createItemRow(item,index,rowColor=""){
   row.className="item" + (rowColor ? " " + rowColor : "");
   const value=quantities[currentPage][index]||0;
   row.innerHTML=`
-    <span class="item-name">${item[0]}</span>
+    <span class="item-name">${translateItem(item[0])}</span>
     <div class="controls">
       <button class="circle-btn minus" type="button" onclick="changeQty(${index},-1)">−</button>
       <span class="count" id="count-${currentPage}-${index}">${value}</span>
@@ -1461,7 +1632,7 @@ function openPage(pageKey){
 
 function goHall(){
   if(!isOwner()){
-    denyAccess("접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.");
+    denyAccess(t("accessDenied"));
     return;
   }
   openPage("hall");
@@ -1473,7 +1644,7 @@ function goVegetable(){
 
 function goKitchen(){
   if(!isOwner()){
-    denyAccess("접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.");
+    denyAccess(t("accessDenied"));
     return;
   }
 
@@ -1534,7 +1705,10 @@ function makeSheet(){
   const flat=getFlatItems(currentPage);
   const list=document.getElementById("list");
   list.innerHTML="";
-  document.getElementById("sheetTitle").textContent=page.sheetTitle;
+  document.getElementById("sheetTitle").textContent=
+    currentLanguage==="vi"
+      ? (currentPage==="kitchen"?t("kitchenOrder"):currentPage==="hall"?t("hallOrder"):t("vegetableOrder"))
+      : page.sheetTitle;
 
   const rawDate=document.getElementById("d").value;
   const formattedDate=rawDate ? rawDate.replaceAll("-",". ") : "";
@@ -1570,18 +1744,18 @@ function makeSheet(){
         "주류·기타":"#8a5a44"
       };
       heading.style.background=colors[section]||"#7c5140";
-      heading.textContent=section;
+      heading.textContent=translateSection(section);
       list.appendChild(heading);
       lastSection=section;
     }
 
     const row=document.createElement("div");
     row.className="row";
-    row.innerHTML=`<span>${item[0]}</span><b>${q}${item[1]}</b>`;
+    row.innerHTML=`<span>${translateItem(item[0])}</span><b>${q}${translateUnit(item[1])}</b>`;
     list.appendChild(row);
   });
 
-  document.getElementById("sheetItemCount").textContent=selectedCount+"개";
+  document.getElementById("sheetItemCount").textContent=currentLanguage==="vi" ? selectedCount+" mục" : selectedCount+"개";
 
   if(selectedCount===0){
     const empty=document.createElement("div");
@@ -1610,23 +1784,23 @@ renderPage();
 
   <div id="scheduleScreen" class="screen">
     <div class="schedule-card">
-      <button class="home-back" type="button" onclick="showHome()">← 메인 메뉴</button>
-      <button class="logout-btn" style="float:right" type="button" onclick="logoutDongrae()">로그아웃</button>
+      <button class="home-back" type="button" onclick="showHome()"><span data-i18n="mainMenu">← 메인 메뉴</span></button>
+      <button class="logout-btn" style="float:right" type="button" onclick="logoutDongrae()"><span data-i18n="logout">로그아웃</span></button>
       <div class="schedule-head">
-        <div class="schedule-title">직원 주간 스케줄</div>
+        <div class="schedule-title" data-i18n="weeklySchedule">직원 주간 스케줄</div>
         <div class="week-controls">
-          <button class="week-btn" type="button" onclick="moveWeek(-1)">← 이전 주</button>
+          <button class="week-btn" type="button" onclick="moveWeek(-1)"><span data-i18n="prevWeek">← 이전 주</span></button>
           <div id="weekLabel"></div>
-          <button class="week-btn" type="button" onclick="moveWeek(1)">다음 주 →</button>
+          <button class="week-btn" type="button" onclick="moveWeek(1)"><span data-i18n="nextWeek">다음 주 →</span></button>
         </div>
       </div>
 
       <div class="schedule-tools">
-        <button class="tool-btn tool-add" type="button" onclick="addEmployee()">+ 직원 추가</button>
-        <button class="tool-btn tool-add" type="button" onclick="copyPreviousWeek()">저번주 불러오기</button>
-        <button class="tool-btn tool-save" type="button" onclick="saveSchedule()">스케줄 저장·동기화</button>
-        <button class="tool-btn tool-image" type="button" onclick="saveScheduleImage()">이미지 저장</button>
-        <button class="tool-btn tool-clear" type="button" onclick="clearSchedule()">이번 주 초기화</button>
+        <button class="tool-btn tool-add" type="button" onclick="addEmployee()"><span data-i18n="addEmployee">+ 직원 추가</span></button>
+        <button class="tool-btn tool-add" type="button" onclick="copyPreviousWeek()"><span data-i18n="copyPrev">저번주 불러오기</span></button>
+        <button class="tool-btn tool-save" type="button" onclick="saveSchedule()"><span data-i18n="saveSync">스케줄 저장·동기화</span></button>
+        <button class="tool-btn tool-image" type="button" onclick="saveScheduleImage()"><span data-i18n="saveImage">이미지 저장</span></button>
+        <button class="tool-btn tool-clear" type="button" onclick="clearSchedule()"><span data-i18n="resetWeek">이번 주 초기화</span></button>
         <span id="saveStatus" class="save-status"></span>
       </div>
 
@@ -1637,8 +1811,24 @@ renderPage();
             <tbody id="scheduleBody"></tbody>
           </table>
         </div>
+
+        <div class="dispatch-section">
+          <div class="dispatch-section-head">
+            <div>
+              <div class="dispatch-title" data-i18n="dispatchSchedule">파출 스케줄</div>
+              <div class="dispatch-subtitle" data-i18n="dispatchDesc">파출 인원 출근·휴무 관리</div>
+            </div>
+            <button class="tool-btn dispatch-add-btn" type="button" onclick="addDispatchEmployee()"><span data-i18n="addDispatch">+ 파출 인원 추가</span></button>
+          </div>
+          <div class="schedule-scroll">
+            <table class="schedule-table dispatch-table">
+              <thead id="dispatchScheduleHead"></thead>
+              <tbody id="dispatchScheduleBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
-      <div class="schedule-note">휴무는 빨간색, 오전은 주황색, 오후는 노란색이며 그 외 입력은 파란색으로 표시됩니다.</div>
+      <div class="schedule-note"><span data-i18n="scheduleNote">휴무는 빨간색, 오전은 주황색, 오후는 노란색이며 그 외 입력은 파란색으로 표시됩니다.</span></div>
     </div>
   </div>
 </div>
@@ -1646,6 +1836,7 @@ renderPage();
 
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
+  applyLanguage();
   if(!firebaseReady || !auth){
     setActiveScreen("loginScreen");
     const errorEl=document.getElementById("loginError");
@@ -1675,7 +1866,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 
       const badge=document.getElementById("roleBadge");
       if(badge){
-        badge.textContent=isOwner() ? "사장" : "직원";
+        badge.textContent=isOwner() ? t("owner") : t("employee");
         badge.className="role-badge "+(isOwner() ? "role-owner" : "role-employee");
       }
 
@@ -1707,5 +1898,272 @@ document.addEventListener("DOMContentLoaded",()=>{
 });
 </script>
 
+<script>
+
+const UI_TEXT = {
+  ko: {
+    appTitle:"동래옥 통합 관리 시스템",
+    language:"언어",
+    chooseMenu:"원하는 메뉴를 선택하세요.",
+    order:"발주",
+    orderDesc:"주방·홀·야채 품목을 선택하고 발주서 이미지를 생성합니다.",
+    schedule:"스케줄",
+    scheduleDesc:"직원별 주간 근무시간을 작성하고 휴대폰에 저장합니다.",
+    mainMenu:"← 메인 메뉴",
+    logout:"로그아웃",
+    orderDate:"발주 날짜",
+    makeSheet:"발주서 만들기",
+    saveImage:"이미지 저장",
+    resetOrder:"현재 발주 초기화",
+    weeklySchedule:"직원 주간 스케줄",
+    prevWeek:"← 이전 주",
+    nextWeek:"다음 주 →",
+    addEmployee:"+ 직원 추가",
+    copyPrev:"저번주 불러오기",
+    saveSync:"스케줄 저장·동기화",
+    resetWeek:"이번 주 초기화",
+    dispatchSchedule:"파출 스케줄",
+    dispatchDesc:"파출 인원 출근·휴무 관리",
+    addDispatch:"+ 파출 인원 추가",
+    scheduleNote:"휴무는 빨간색, 오전은 주황색, 오후는 노란색이며 그 외 입력은 파란색으로 표시됩니다.",
+    loginSubtitle:"등록된 관리자 계정으로 로그인하세요.",
+    email:"이메일",
+    password:"비밀번호",
+    login:"로그인",
+    kitchenOrder:"주방 발주",
+    hallOrder:"홀 발주",
+    vegetableOrder:"야채 발주",
+    mainOrder:"주방 발주",
+    selectedItems:"선택 품목",
+    thankYou:"감사합니다.",
+    staff:"직원",
+    dispatch:"파출 인원",
+    off:"휴무",
+    morning:"오전",
+    afternoon:"오후",
+    owner:"사장",
+    employee:"직원",
+    accessDenied:"접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다."
+  },
+  vi: {
+    appTitle:"Hệ thống quản lý tổng hợp Dongraeok",
+    language:"Ngôn ngữ",
+    chooseMenu:"Vui lòng chọn chức năng.",
+    order:"Đặt hàng",
+    orderDesc:"Chọn hàng bếp, sảnh và rau rồi tạo phiếu đặt hàng.",
+    schedule:"Lịch làm việc",
+    scheduleDesc:"Lập lịch làm việc theo tuần cho nhân viên.",
+    mainMenu:"← Menu chính",
+    logout:"Đăng xuất",
+    orderDate:"Ngày đặt hàng",
+    makeSheet:"Tạo phiếu đặt hàng",
+    saveImage:"Lưu ảnh",
+    resetOrder:"Đặt lại đơn hiện tại",
+    weeklySchedule:"Lịch làm việc hàng tuần",
+    prevWeek:"← Tuần trước",
+    nextWeek:"Tuần sau →",
+    addEmployee:"+ Thêm nhân viên",
+    copyPrev:"Sao chép tuần trước",
+    saveSync:"Lưu và đồng bộ",
+    resetWeek:"Đặt lại tuần này",
+    dispatchSchedule:"Lịch nhân viên thời vụ",
+    dispatchDesc:"Quản lý đi làm/nghỉ của nhân viên thời vụ",
+    addDispatch:"+ Thêm nhân viên thời vụ",
+    scheduleNote:"Nghỉ màu đỏ, ca sáng màu cam, ca chiều màu vàng, nội dung khác màu xanh.",
+    loginSubtitle:"Đăng nhập bằng tài khoản đã đăng ký.",
+    email:"Email",
+    password:"Mật khẩu",
+    login:"Đăng nhập",
+    kitchenOrder:"Đặt hàng bếp",
+    hallOrder:"Đặt hàng sảnh",
+    vegetableOrder:"Đặt hàng rau",
+    mainOrder:"Đặt hàng bếp",
+    selectedItems:"Mặt hàng đã chọn",
+    thankYou:"Xin cảm ơn.",
+    staff:"Nhân viên",
+    dispatch:"Nhân viên thời vụ",
+    off:"Nghỉ",
+    morning:"Ca sáng",
+    afternoon:"Ca chiều",
+    owner:"Chủ",
+    employee:"Nhân viên",
+    accessDenied:"Bạn không có quyền truy cập.\nTài khoản nhân viên chỉ được dùng mục đặt hàng rau."
+  }
+};
+
+const ITEM_VI = {
+  "돼지머리(탕용)":"Thịt đầu heo (nấu canh)",
+  "돼지머리(수육용)":"Thịt đầu heo (luộc)",
+  "토종순대":"Dồi truyền thống",
+  "백순대":"Dồi trắng",
+  "찰순대":"Dồi nếp",
+  "다대기":"Sốt gia vị cay",
+  "사골육수":"Nước hầm xương bò",
+  "낚지볶음":"Bạch tuộc xào",
+  "편육":"Thịt ép lát",
+  "돈가스":"Thịt heo chiên xù",
+  "순살족발":"Chân giò rút xương",
+  "우삼겹":"Ba chỉ bò",
+  "함박":"Hamburg steak",
+  "소고기 곰탕":"Canh bò hầm",
+  "소곱창 전골":"Lẩu lòng bò",
+  "겉절이 김치":"Kimchi tươi",
+  "돼지곱창":"Lòng heo",
+  "오소리":"Dạ dày heo",
+  "카스":"Cass",
+  "테라":"Terra",
+  "참이슬":"Chamisul",
+  "처음처럼":"Chum Churum",
+  "진로이즈":"Jinro Is Back",
+  "새로":"Saero",
+  "참이슬 오리지날":"Chamisul Original",
+  "청하":"Cheongha",
+  "참소스":"Sốt cham",
+  "돈가스 소스":"Sốt tonkatsu",
+  "종이컵":"Cốc giấy",
+  "물티슈":"Khăn ướt",
+  "테이블 냅킨":"Khăn giấy bàn",
+  "점보롤":"Giấy cuộn jumbo",
+  "두루마리 휴지":"Giấy vệ sinh cuộn",
+  "키친타올":"Khăn giấy bếp",
+  "쌈장":"Ssamjang",
+  "단무지":"Củ cải vàng",
+  "옥수수 콘샐러드":"Salad bắp",
+  "후추":"Tiêu",
+  "머스타드":"Mù tạt",
+  "데리야끼":"Sốt teriyaki",
+  "새우젓":"Mắm tép",
+  "커피믹스":"Cà phê hòa tan",
+  "들깨가루":"Bột mè tía",
+  "원두커피":"Cà phê hạt",
+  "두칸실링":"Hộp 2 ngăn",
+  "깍두기용기 (95)":"Hộp kimchi củ cải (95)",
+  "소스용기 (70)":"Hộp đựng sốt (70)",
+  "육수용기 500ml":"Hộp nước dùng 500ml",
+  "들깨 포장봉지":"Túi đóng gói bột mè",
+  "포장봉투(중)":"Túi mang về (vừa)",
+  "포장봉투(소)":"Túi mang về (nhỏ)",
+  "탕용기":"Hộp đựng canh",
+  "식기세척기 세제":"Nước rửa máy rửa chén",
+  "식기세척기 린스":"Nước trợ xả máy rửa chén",
+  "초음파 세척세제":"Chất tẩy rửa siêu âm",
+  "트리오":"Nước rửa chén Trio",
+  "라텍스 장갑(대)":"Găng latex cỡ lớn",
+  "라텍스 장갑(중)":"Găng latex cỡ vừa",
+  "고무장갑(소)":"Găng cao su cỡ nhỏ",
+  "고무장갑(대)":"Găng cao su cỡ lớn",
+  "크린랩 30X40":"Màng bọc 30x40",
+  "파란봉투 70L":"Túi rác xanh 70L",
+  "부추":"Hẹ",
+  "양파":"Hành tây",
+  "대파":"Hành lá",
+  "숙주":"Giá đỗ",
+  "청경채":"Cải thìa",
+  "팽이버섯":"Nấm kim châm",
+  "청양고추":"Ớt xanh cay",
+  "단호박":"Bí đỏ",
+  "쑥갓":"Rau cải cúc",
+  "깻잎":"Lá mè",
+  "마늘":"Tỏi",
+  "초장":"Tương ớt chấm",
+  "고추기름":"Dầu ớt",
+  "깍두기":"Kimchi củ cải",
+  "장수 막걸리":"Makgeolli Jangsu",
+  "지평 막걸리":"Makgeolli Jipyeong",
+  "쓰레기 봉투(75)":"Túi rác (75)",
+  "담금주":"Rượu ngâm"
+};
+
+const SECTION_VI = {
+  "머리고기류":"Thịt đầu heo",
+  "순대류":"Các loại dồi",
+  "원팩 조리 품목":"Món chế biến 1 gói",
+  "냉동 육류":"Thịt đông lạnh",
+  "탕·전골":"Canh và lẩu",
+  "김치":"Kimchi",
+  "내장류":"Nội tạng",
+  "주류":"Đồ uống có cồn",
+  "소스류":"Các loại sốt",
+  "홀 메인 품목":"Đồ dùng khu vực sảnh",
+  "포장용기":"Đồ đóng gói",
+  "주방용품":"Đồ dùng bếp",
+  "야채·식재료":"Rau và nguyên liệu",
+  "주류·기타":"Đồ uống và khác"
+};
+
+const UNIT_VI = {
+  "박스":"thùng",
+  "개":"cái",
+  "봉지":"túi",
+  "통":"hộp",
+  "망":"lưới",
+  "단":"bó",
+  "묶음":"bó"
+};
+
+let currentLanguage=localStorage.getItem("dongrae_language")||"ko";
+
+function t(key){
+  return (UI_TEXT[currentLanguage]&&UI_TEXT[currentLanguage][key])||UI_TEXT.ko[key]||key;
+}
+
+function translateItem(name){
+  return currentLanguage==="vi" ? (ITEM_VI[name]||name) : name;
+}
+
+function translateSection(name){
+  return currentLanguage==="vi" ? (SECTION_VI[name]||name) : name;
+}
+
+function translateUnit(unit){
+  return currentLanguage==="vi" ? (UNIT_VI[unit]||unit) : unit;
+}
+
+function translateShiftValue(value){
+  if(currentLanguage!=="vi") return value;
+  if(value==="휴무") return "Nghỉ";
+  if(value==="오전") return "Ca sáng";
+  if(value==="오후") return "Ca chiều";
+  return value;
+}
+
+function normalizeShiftValueForStorage(value){
+  const v=String(value||"").trim();
+  if(v==="Nghỉ") return "휴무";
+  if(v==="Ca sáng") return "오전";
+  if(v==="Ca chiều") return "오후";
+  return v;
+}
+
+function setLanguage(lang){
+  currentLanguage=lang==="vi"?"vi":"ko";
+  localStorage.setItem("dongrae_language",currentLanguage);
+  applyLanguage();
+}
+
+function applyLanguage(){
+  document.documentElement.lang=currentLanguage==="vi"?"vi":"ko";
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const key=el.dataset.i18n;
+    if(UI_TEXT[currentLanguage][key]) el.textContent=UI_TEXT[currentLanguage][key];
+  });
+
+  const koBtn=document.getElementById("langKoBtn");
+  const viBtn=document.getElementById("langViBtn");
+  if(koBtn) koBtn.classList.toggle("active",currentLanguage==="ko");
+  if(viBtn) viBtn.classList.toggle("active",currentLanguage==="vi");
+
+  const badge=document.getElementById("roleBadge");
+  if(badge && currentUserRole){
+    badge.textContent=isOwner()?t("owner"):t("employee");
+  }
+
+  renderPage();
+  if(document.getElementById("scheduleScreen")?.classList.contains("active")){
+    renderScheduleWithoutReload();
+  }
+}
+
+</script>
 </body>
 </html>
