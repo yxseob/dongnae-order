@@ -1460,6 +1460,59 @@ button,
   .work-employee-add{grid-template-columns:1fr}
 }
 
+
+.work-report-item{
+  align-items:flex-start;
+}
+.work-report-content{
+  flex:1;
+  min-width:0;
+}
+.work-report-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.work-report-actions{
+  display:flex;
+  gap:7px;
+  flex-wrap:wrap;
+  margin-top:9px;
+}
+.work-delete-btn{
+  border:none;
+  border-radius:8px;
+  padding:7px 10px;
+  background:#b23a3a;
+  color:#fff;
+  font-size:13px;
+  font-weight:900;
+  cursor:pointer;
+}
+.work-delete-btn.dark{
+  background:#555;
+}
+.work-day-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:5px 0;
+  border-bottom:1px dashed #ddd;
+}
+.work-day-row:last-child{
+  border-bottom:none;
+}
+.work-day-text{
+  flex:1;
+}
+.work-month-delete-wrap{
+  display:flex;
+  justify-content:flex-end;
+  margin-bottom:10px;
+}
+
 </style>
 </head>
 
@@ -2296,6 +2349,32 @@ function loadMonthlyWorkReport(){
     renderMonthlyWorkReport();
   },error=>console.error("월별 근무시간 불러오기 실패:",error));
 }
+
+async function deleteWorkDay(employeeId,date){
+  if(!isOwner())return;
+  if(!confirm(t("deleteWorkDay")))return;
+  const month=date.slice(0,7);
+  await db.ref(`${workMonthPath(month)}/${employeeId}/${date}`).remove();
+
+  if(selectedWorkEmployeeId()===employeeId && selectedWorkDate()===date){
+    document.getElementById("workHours").value=0;
+    document.getElementById("workMinutes").value=0;
+    updateWorkPreview();
+  }
+}
+async function deleteEmployeeMonth(employeeId){
+  if(!isOwner())return;
+  const month=document.getElementById("workReportMonth")?.value||currentLocalMonth();
+  if(!confirm(t("deleteEmployeeMonth")))return;
+  await db.ref(`${workMonthPath(month)}/${employeeId}`).remove();
+}
+async function deleteEntireWorkMonth(){
+  if(!isOwner())return;
+  const month=document.getElementById("workReportMonth")?.value||currentLocalMonth();
+  if(!confirm(t("deleteEntireMonthConfirm")))return;
+  await db.ref(workMonthPath(month)).remove();
+}
+
 function renderMonthlyWorkReport(){
   const list=document.getElementById("workReportList");
   if(!list)return;
@@ -2325,15 +2404,24 @@ function renderMonthlyWorkReport(){
 
   list.innerHTML=rows.map(row=>`
     <div class="work-report-item">
-      <div>
-        <div class="work-report-name">${escapeHtml(row.name)}</div>
+      <div class="work-report-content">
+        <div class="work-report-top">
+          <div class="work-report-name">${escapeHtml(row.name)}</div>
+          <div class="work-report-total">${formatMinutes(row.total)}</div>
+        </div>
         <div class="work-detail">
           ${row.entries.length
-            ? row.entries.map(e=>`${e.date.slice(8,10)}일 · ${formatMinutes(e.minutes)}`).join("<br>")
+            ? row.entries.map(e=>`
+              <div class="work-day-row">
+                <span class="work-day-text">${e.date.slice(8,10)}일 · ${formatMinutes(e.minutes)}</span>
+                <button class="work-delete-btn" type="button" onclick="deleteWorkDay('${row.id}','${e.date}')">${t("deleteDay")}</button>
+              </div>`).join("")
             : t("noWorkRecords")}
         </div>
+        <div class="work-report-actions">
+          <button class="work-delete-btn dark" type="button" onclick="deleteEmployeeMonth('${row.id}')">${t("deleteEmployeeRecords")}</button>
+        </div>
       </div>
-      <div class="work-report-total">${formatMinutes(row.total)}</div>
     </div>
   `).join("");
 }
@@ -2645,7 +2733,7 @@ const UI_TEXT = {
     afternoon:"오후",
     owner:"사장",
     employee:"직원",
-    accessDenied:"접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.",reservation:"예약",reservationDesc:"예약 날짜, 시간, 인원과 예약자 성함을 관리합니다.",newReservation:"새로운 예약자가 추가되었습니다.",reservationManagement:"예약 관리",reservationDate:"예약 날짜",reservationTime:"예약 시간",reservationPeople:"예약 인원",reservationName:"예약자 성함",addReservation:"예약 추가",delete:"삭제",peopleUnit:"명",noReservations:"등록된 예약이 없습니다.",fillReservation:"날짜, 시간, 인원, 성함을 모두 입력해주세요.",deleteReservation:"이 예약을 삭제할까요?",reservationPhone:"전화번호",reservationMemo:"메모 (선택)",listView:"목록 보기",calendarView:"달력 보기",searchReservation:"성함·전화번호 검색",call:"전화",complete:"방문완료",undoComplete:"완료 취소",edit:"수정",saveEdit:"수정 저장",phoneRequired:"전화번호를 입력해주세요.",deleteOwnerOnly:"예약 삭제는 사장 계정만 가능합니다.",workTime:"근무시간",workTimeDesc:"직원별 일일 근무시간을 기록하고 월별 합계를 확인합니다.",workTimeManagement:"직원 근무시간 기록",employeeManagement:"직원 관리",employeeNamePlaceholder:"직원 이름",addEmployeeButton:"직원 추가",todayWorkEntry:"근무시간 입력",selectEmployee:"직원 선택",workDate:"근무 날짜",hours:"시간",minutes:"분",saveWorkTime:"근무시간 저장",monthlyWorkReport:"월별 직원 근무시간",noEmployees:"등록된 직원이 없습니다.",saved:"저장되었습니다.",chooseEmployee:"직원을 선택해주세요.",confirmDeleteEmployee:"이 직원을 삭제할까요? 기존 근무 기록은 유지됩니다.",noWorkRecords:"해당 월의 근무 기록이 없습니다."
+    accessDenied:"접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.",reservation:"예약",reservationDesc:"예약 날짜, 시간, 인원과 예약자 성함을 관리합니다.",newReservation:"새로운 예약자가 추가되었습니다.",reservationManagement:"예약 관리",reservationDate:"예약 날짜",reservationTime:"예약 시간",reservationPeople:"예약 인원",reservationName:"예약자 성함",addReservation:"예약 추가",delete:"삭제",peopleUnit:"명",noReservations:"등록된 예약이 없습니다.",fillReservation:"날짜, 시간, 인원, 성함을 모두 입력해주세요.",deleteReservation:"이 예약을 삭제할까요?",reservationPhone:"전화번호",reservationMemo:"메모 (선택)",listView:"목록 보기",calendarView:"달력 보기",searchReservation:"성함·전화번호 검색",call:"전화",complete:"방문완료",undoComplete:"완료 취소",edit:"수정",saveEdit:"수정 저장",phoneRequired:"전화번호를 입력해주세요.",deleteOwnerOnly:"예약 삭제는 사장 계정만 가능합니다.",workTime:"근무시간",workTimeDesc:"직원별 일일 근무시간을 기록하고 월별 합계를 확인합니다.",workTimeManagement:"직원 근무시간 기록",employeeManagement:"직원 관리",employeeNamePlaceholder:"직원 이름",addEmployeeButton:"직원 추가",todayWorkEntry:"근무시간 입력",selectEmployee:"직원 선택",workDate:"근무 날짜",hours:"시간",minutes:"분",saveWorkTime:"근무시간 저장",monthlyWorkReport:"월별 직원 근무시간",noEmployees:"등록된 직원이 없습니다.",saved:"저장되었습니다.",chooseEmployee:"직원을 선택해주세요.",confirmDeleteEmployee:"이 직원을 삭제할까요? 기존 근무 기록은 유지됩니다.",noWorkRecords:"해당 월의 근무 기록이 없습니다.",deleteWorkDay:"이 날짜의 근무기록을 삭제하시겠습니까?",deleteEmployeeMonth:"이 직원의 해당 월 근무기록을 모두 삭제하시겠습니까?",deleteEntireMonth:"이번 달 기록 전체 삭제",deleteEntireMonthConfirm:"선택한 달의 모든 직원 근무기록을 삭제하시겠습니까?",deleteDay:"삭제",deleteEmployeeRecords:"이 직원 월 기록 삭제"
   },
   vi: {
     appTitle:"Hệ thống quản lý tổng hợp Dongraeok",
@@ -2689,7 +2777,7 @@ const UI_TEXT = {
     afternoon:"Ca chiều",
     owner:"Chủ",
     employee:"Nhân viên",
-    accessDenied:"Bạn không có quyền truy cập.\nTài khoản nhân viên chỉ được dùng mục đặt hàng rau.",reservation:"Đặt bàn",reservationDesc:"Quản lý ngày, giờ, số người và tên người đặt.",newReservation:"Có đặt bàn mới.",reservationManagement:"Quản lý đặt bàn",reservationDate:"Ngày đặt",reservationTime:"Giờ đặt",reservationPeople:"Số người",reservationName:"Tên người đặt",addReservation:"Thêm đặt bàn",delete:"Xóa",peopleUnit:"người",noReservations:"Chưa có đặt bàn.",fillReservation:"Vui lòng nhập đầy đủ ngày, giờ, số người và tên.",deleteReservation:"Bạn có muốn xóa đặt bàn này không?",reservationPhone:"Số điện thoại",reservationMemo:"Ghi chú (không bắt buộc)",listView:"Danh sách",calendarView:"Lịch",searchReservation:"Tìm tên hoặc số điện thoại",call:"Gọi",complete:"Đã đến",undoComplete:"Hủy hoàn tất",edit:"Sửa",saveEdit:"Lưu sửa",phoneRequired:"Vui lòng nhập số điện thoại.",deleteOwnerOnly:"Chỉ tài khoản chủ mới được xóa đặt bàn.",workTime:"Giờ làm việc",workTimeDesc:"Ghi giờ làm mỗi ngày và xem tổng theo tháng.",workTimeManagement:"Ghi giờ làm của nhân viên",employeeManagement:"Quản lý nhân viên",employeeNamePlaceholder:"Tên nhân viên",addEmployeeButton:"Thêm nhân viên",todayWorkEntry:"Nhập giờ làm",selectEmployee:"Chọn nhân viên",workDate:"Ngày làm",hours:"Giờ",minutes:"Phút",saveWorkTime:"Lưu giờ làm",monthlyWorkReport:"Tổng giờ làm theo tháng",noEmployees:"Chưa có nhân viên.",saved:"Đã lưu.",chooseEmployee:"Vui lòng chọn nhân viên.",confirmDeleteEmployee:"Xóa nhân viên này? Dữ liệu giờ làm cũ vẫn được giữ.",noWorkRecords:"Tháng này chưa có dữ liệu."
+    accessDenied:"Bạn không có quyền truy cập.\nTài khoản nhân viên chỉ được dùng mục đặt hàng rau.",reservation:"Đặt bàn",reservationDesc:"Quản lý ngày, giờ, số người và tên người đặt.",newReservation:"Có đặt bàn mới.",reservationManagement:"Quản lý đặt bàn",reservationDate:"Ngày đặt",reservationTime:"Giờ đặt",reservationPeople:"Số người",reservationName:"Tên người đặt",addReservation:"Thêm đặt bàn",delete:"Xóa",peopleUnit:"người",noReservations:"Chưa có đặt bàn.",fillReservation:"Vui lòng nhập đầy đủ ngày, giờ, số người và tên.",deleteReservation:"Bạn có muốn xóa đặt bàn này không?",reservationPhone:"Số điện thoại",reservationMemo:"Ghi chú (không bắt buộc)",listView:"Danh sách",calendarView:"Lịch",searchReservation:"Tìm tên hoặc số điện thoại",call:"Gọi",complete:"Đã đến",undoComplete:"Hủy hoàn tất",edit:"Sửa",saveEdit:"Lưu sửa",phoneRequired:"Vui lòng nhập số điện thoại.",deleteOwnerOnly:"Chỉ tài khoản chủ mới được xóa đặt bàn.",workTime:"Giờ làm việc",workTimeDesc:"Ghi giờ làm mỗi ngày và xem tổng theo tháng.",workTimeManagement:"Ghi giờ làm của nhân viên",employeeManagement:"Quản lý nhân viên",employeeNamePlaceholder:"Tên nhân viên",addEmployeeButton:"Thêm nhân viên",todayWorkEntry:"Nhập giờ làm",selectEmployee:"Chọn nhân viên",workDate:"Ngày làm",hours:"Giờ",minutes:"Phút",saveWorkTime:"Lưu giờ làm",monthlyWorkReport:"Tổng giờ làm theo tháng",noEmployees:"Chưa có nhân viên.",saved:"Đã lưu.",chooseEmployee:"Vui lòng chọn nhân viên.",confirmDeleteEmployee:"Xóa nhân viên này? Dữ liệu giờ làm cũ vẫn được giữ.",noWorkRecords:"Tháng này chưa có dữ liệu.",deleteWorkDay:"Xóa giờ làm của ngày này?",deleteEmployeeMonth:"Xóa toàn bộ giờ làm tháng này của nhân viên này?",deleteEntireMonth:"Xóa toàn bộ dữ liệu tháng này",deleteEntireMonthConfirm:"Xóa toàn bộ dữ liệu giờ làm của tháng đã chọn?",deleteDay:"Xóa",deleteEmployeeRecords:"Xóa dữ liệu tháng của nhân viên"
   }
 };
 
@@ -2938,6 +3026,9 @@ function applyLanguage(){
       <div class="work-report-head">
         <div class="work-section-title" style="margin:0" data-i18n="monthlyWorkReport">월별 직원 근무시간</div>
         <input id="workReportMonth" class="work-input work-month" type="month" onchange="loadMonthlyWorkReport()">
+      </div>
+      <div class="work-month-delete-wrap">
+        <button class="work-delete-btn dark" type="button" onclick="deleteEntireWorkMonth()" data-i18n="deleteEntireMonth">이번 달 기록 전체 삭제</button>
       </div>
       <div id="workReportList" class="work-report-list"></div>
     </div>
