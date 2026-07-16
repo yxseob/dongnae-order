@@ -1890,6 +1890,14 @@ button,
   }
 }
 
+
+.circle-btn{
+  touch-action:manipulation;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+}
+
 </style>
 </head>
 
@@ -2305,9 +2313,9 @@ function createItemRow(item,index,rowColor=""){
   row.innerHTML=`
     <span class="item-name">${translateItem(item[0])}</span>
     <div class="controls">
-      <button class="circle-btn minus" type="button" onclick="changeQty(${index},-1)">−</button>
+      <button class="circle-btn minus" type="button" onclick="changeQty(${index},-1)" onpointerdown="startOrderHold(${index},-1,event)" onpointerup="stopOrderHold()" onpointercancel="stopOrderHold()" onpointerleave="stopOrderHold()">−</button>
       <span class="count" id="count-${currentPage}-${index}">${value}</span>
-      <button class="circle-btn plus" type="button" onclick="changeQty(${index},1)">+</button>
+      <button class="circle-btn plus" type="button" onclick="changeQty(${index},1)" onpointerdown="startOrderHold(${index},1,event)" onpointerup="stopOrderHold()" onpointercancel="stopOrderHold()" onpointerleave="stopOrderHold()">+</button>
     </div>`;
   return row;
 }
@@ -2318,6 +2326,35 @@ function changeQty(index,delta){
   document.getElementById(`count-${currentPage}-${index}`).textContent=quantities[currentPage][index];
   queueOrderSave(currentPage);
 }
+
+let orderHoldDelayTimer=null;
+let orderHoldRepeatTimer=null;
+
+function startOrderHold(index,delta,event){
+  stopOrderHold();
+
+  if(event && event.currentTarget){
+    try{ event.currentTarget.setPointerCapture(event.pointerId); }catch(e){}
+  }
+
+  orderHoldDelayTimer=setTimeout(()=>{
+    orderHoldRepeatTimer=setInterval(()=>{
+      changeQty(index,delta);
+    },90);
+  },420);
+}
+
+function stopOrderHold(){
+  clearTimeout(orderHoldDelayTimer);
+  clearInterval(orderHoldRepeatTimer);
+  orderHoldDelayTimer=null;
+  orderHoldRepeatTimer=null;
+}
+
+document.addEventListener("pointerup",stopOrderHold);
+document.addEventListener("pointercancel",stopOrderHold);
+window.addEventListener("blur",stopOrderHold);
+
 
 function openPage(pageKey){
   if(currentPage===pageKey) return;
