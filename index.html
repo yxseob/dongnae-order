@@ -190,6 +190,12 @@ function showReservations(){
   renderReservations();
 }
 
+function showWorkTime(){
+  if(!requireLogin()) return;
+  setActiveScreen("workTimeScreen");
+  initializeWorkTimeScreen();
+}
+
 /* 직원 스케줄 */
 let scheduleWeekStart = getMonday(new Date());
 let scheduleEmployees = [];
@@ -1262,6 +1268,198 @@ button,
   .reservation-actions{width:100%;justify-content:flex-start}
   .calendar-day{min-height:76px;padding:5px}
 }
+
+/* 근무시간 기록 */
+.work-card{
+  max-width:980px;
+  margin:auto;
+  background:#fff;
+  border-radius:18px;
+  padding:18px;
+  box-shadow:0 8px 24px rgba(0,0,0,.08);
+}
+.work-title{
+  margin:16px 0 14px;
+  text-align:center;
+  font-size:24px;
+  font-weight:900;
+}
+.work-section{
+  margin-top:18px;
+  padding:16px;
+  border:1px solid #e1e4e8;
+  border-radius:14px;
+  background:#fafafa;
+}
+.work-section-title{
+  margin-bottom:12px;
+  font-size:19px;
+  font-weight:900;
+}
+.work-employee-add{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:8px;
+}
+.work-input,.work-select{
+  width:100%;
+  padding:11px 12px;
+  border:1px solid #d5d9df;
+  border-radius:10px;
+  background:#fff;
+  font-size:15px;
+  user-select:text;
+  -webkit-user-select:text;
+}
+.work-primary-btn{
+  border:none;
+  border-radius:10px;
+  padding:11px 14px;
+  background:#8b2f2f;
+  color:#fff;
+  font-weight:900;
+  cursor:pointer;
+}
+.work-employees{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  margin-top:10px;
+}
+.work-employee-chip{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:8px 9px;
+  border:1px solid #d9dde2;
+  border-radius:999px;
+  background:#fff;
+  font-size:14px;
+  font-weight:900;
+}
+.work-chip-delete{
+  border:none;
+  border-radius:50%;
+  width:22px;
+  height:22px;
+  background:#555;
+  color:#fff;
+  font-weight:900;
+}
+.work-entry-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.work-time-controls{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:14px;
+}
+.work-time-box{
+  padding:14px;
+  border:1px solid #d8dce1;
+  border-radius:13px;
+  background:#fff;
+  text-align:center;
+}
+.work-time-label{
+  margin-bottom:9px;
+  color:#666;
+  font-size:14px;
+  font-weight:900;
+}
+.work-stepper{
+  display:grid;
+  grid-template-columns:46px 1fr 46px;
+  align-items:center;
+  gap:8px;
+}
+.work-stepper button{
+  height:44px;
+  border:none;
+  border-radius:10px;
+  background:#333;
+  color:#fff;
+  font-size:24px;
+  font-weight:900;
+}
+.work-stepper input{
+  width:100%;
+  height:44px;
+  border:1px solid #d7dbe1;
+  border-radius:10px;
+  text-align:center;
+  font-size:21px;
+  font-weight:900;
+  background:#fff;
+}
+.work-total-preview{
+  margin:14px 0 0;
+  padding:12px;
+  border-radius:11px;
+  background:#f1e9e2;
+  text-align:center;
+  font-size:18px;
+  font-weight:900;
+}
+.work-report-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.work-month{
+  width:auto;
+  min-width:170px;
+}
+.work-report-list{
+  display:grid;
+  gap:9px;
+}
+.work-report-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:13px;
+  border:1px solid #dfe2e6;
+  border-radius:11px;
+  background:#fff;
+}
+.work-report-name{
+  font-size:16px;
+  font-weight:900;
+}
+.work-report-total{
+  font-size:18px;
+  font-weight:900;
+  color:#8b2f2f;
+}
+.work-detail{
+  margin-top:8px;
+  padding-top:8px;
+  border-top:1px dashed #ddd;
+  color:#666;
+  font-size:13px;
+  line-height:1.55;
+}
+.work-status{
+  min-height:20px;
+  margin-top:9px;
+  text-align:center;
+  font-size:13px;
+  font-weight:900;
+  color:#2e6f3e;
+}
+@media(max-width:700px){
+  .work-entry-grid,.work-time-controls{grid-template-columns:1fr}
+  .work-employee-add{grid-template-columns:1fr}
+}
+
 </style>
 </head>
 
@@ -1319,6 +1517,13 @@ button,
           <div class="menu-name" data-i18n="schedule">스케줄</div>
           <div class="menu-desc" data-i18n="scheduleDesc">직원별 주간 근무시간을 작성하고 휴대폰에 저장합니다.</div>
         </button>
+      <button id="workTimeMenuButton" class="menu-card" type="button" onclick="showWorkTime()">
+        <div class="menu-icon">⏱️</div>
+        <div class="menu-text">
+          <div class="menu-name" data-i18n="workTime">근무시간</div>
+          <div class="menu-desc" data-i18n="workTimeDesc">직원별 일일 근무시간을 기록하고 월별 합계를 확인합니다.</div>
+        </div>
+      </button>
       <button id="reservationMenuButton" class="menu-card" type="button" onclick="showReservations()">
         <div class="menu-icon">📞</div>
         <div class="menu-text">
@@ -1899,6 +2104,240 @@ renderPage();
 <script>
 
 
+
+let workEmployees=[];
+let workEmployeesRef=null;
+let workMonthlyRef=null;
+let currentMonthLogs={};
+
+function workEmployeesPath(){ return "dongrae/workEmployees"; }
+function workMonthPath(month){ return "dongrae/workLogs/"+month; }
+
+function todayLocalISO(){
+  const d=new Date();
+  const offset=d.getTimezoneOffset();
+  return new Date(d.getTime()-offset*60000).toISOString().slice(0,10);
+}
+function currentLocalMonth(){ return todayLocalISO().slice(0,7); }
+
+function attachWorkEmployeeSync(){
+  if(!firebaseReady||!currentAuthUser)return;
+  if(workEmployeesRef)workEmployeesRef.off();
+  workEmployeesRef=db.ref(workEmployeesPath());
+  workEmployeesRef.on("value",snap=>{
+    const value=snap.val()||{};
+    workEmployees=Object.keys(value).map(id=>({id,name:value[id].name||"직원"}))
+      .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+    renderWorkEmployees();
+    loadWorkEntryForSelection();
+    if(isOwner())loadMonthlyWorkReport();
+  },error=>console.error("직원 목록 동기화 실패:",error));
+}
+function detachWorkSync(){
+  if(workEmployeesRef)workEmployeesRef.off();
+  if(workMonthlyRef)workMonthlyRef.off();
+  workEmployeesRef=null;
+  workMonthlyRef=null;
+  workEmployees=[];
+  currentMonthLogs={};
+}
+function initializeWorkTimeScreen(){
+  const date=document.getElementById("workDate");
+  const month=document.getElementById("workReportMonth");
+  if(date&&!date.value)date.value=todayLocalISO();
+  if(month&&!month.value)month.value=currentLocalMonth();
+
+  const employeeSection=document.getElementById("workOwnerEmployeeSection");
+  const reportSection=document.getElementById("workOwnerReportSection");
+  if(employeeSection)employeeSection.style.display=isOwner()?"block":"none";
+  if(reportSection)reportSection.style.display=isOwner()?"block":"none";
+
+  renderWorkEmployees();
+  loadWorkEntryForSelection();
+  if(isOwner())loadMonthlyWorkReport();
+}
+function renderWorkEmployees(){
+  const select=document.getElementById("workEmployeeSelect");
+  const chips=document.getElementById("workEmployeeChips");
+
+  if(select){
+    const previous=select.value;
+    if(!workEmployees.length){
+      select.innerHTML=`<option value="">${t("noEmployees")}</option>`;
+    }else{
+      select.innerHTML=workEmployees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
+      if(workEmployees.some(e=>e.id===previous))select.value=previous;
+    }
+  }
+
+  if(chips){
+    if(!workEmployees.length){
+      chips.innerHTML=`<div class="reservation-empty">${t("noEmployees")}</div>`;
+    }else{
+      chips.innerHTML=workEmployees.map(e=>`
+        <div class="work-employee-chip">
+          <span>${escapeHtml(e.name)}</span>
+          <button class="work-chip-delete" type="button" onclick="deleteWorkEmployee('${e.id}')">×</button>
+        </div>`).join("");
+    }
+  }
+}
+async function addWorkEmployee(){
+  if(!isOwner()){denyAccess(t("accessDenied"));return;}
+  const input=document.getElementById("newWorkEmployeeName");
+  const name=(input?.value||"").trim();
+  if(!name)return;
+  await db.ref(workEmployeesPath()).push().set({
+    name,
+    createdAt:firebase.database.ServerValue.TIMESTAMP
+  });
+  input.value="";
+}
+async function deleteWorkEmployee(id){
+  if(!isOwner())return;
+  if(!confirm(t("confirmDeleteEmployee")))return;
+  await db.ref(workEmployeesPath()+"/"+id).remove();
+}
+function selectedWorkEmployeeId(){
+  return document.getElementById("workEmployeeSelect")?.value||"";
+}
+function selectedWorkDate(){
+  return document.getElementById("workDate")?.value||todayLocalISO();
+}
+function normalizeWorkInputs(){
+  const h=document.getElementById("workHours");
+  const m=document.getElementById("workMinutes");
+  let hours=Math.max(0,Math.min(23,Number(h.value)||0));
+  let minutes=Math.max(0,Math.min(59,Number(m.value)||0));
+  h.value=hours;
+  m.value=minutes;
+  updateWorkPreview();
+}
+function changeWorkHours(delta){
+  const input=document.getElementById("workHours");
+  input.value=Math.max(0,Math.min(23,(Number(input.value)||0)+delta));
+  updateWorkPreview();
+}
+function changeWorkMinutes(delta){
+  const h=document.getElementById("workHours");
+  const m=document.getElementById("workMinutes");
+  let total=(Number(h.value)||0)*60+(Number(m.value)||0)+delta;
+  total=Math.max(0,Math.min(23*60+59,total));
+  h.value=Math.floor(total/60);
+  m.value=total%60;
+  updateWorkPreview();
+}
+function formatMinutes(total){
+  total=Math.max(0,Number(total)||0);
+  const h=Math.floor(total/60);
+  const m=total%60;
+  return currentLanguage==="vi"?`${h} giờ ${m} phút`:`${h}시간 ${m}분`;
+}
+function updateWorkPreview(){
+  const h=Number(document.getElementById("workHours")?.value)||0;
+  const m=Number(document.getElementById("workMinutes")?.value)||0;
+  const preview=document.getElementById("workTotalPreview");
+  if(preview)preview.textContent=formatMinutes(h*60+m);
+}
+async function loadWorkEntryForSelection(){
+  const employeeId=selectedWorkEmployeeId();
+  const date=selectedWorkDate();
+  if(!employeeId||!date){
+    document.getElementById("workHours").value=0;
+    document.getElementById("workMinutes").value=0;
+    updateWorkPreview();
+    return;
+  }
+
+  try{
+    const month=date.slice(0,7);
+    const snap=await db.ref(`${workMonthPath(month)}/${employeeId}/${date}`).once("value");
+    const value=snap.val()||{};
+    const total=Number(value.minutes||0);
+    document.getElementById("workHours").value=Math.floor(total/60);
+    document.getElementById("workMinutes").value=total%60;
+    updateWorkPreview();
+  }catch(error){
+    console.error("근무시간 불러오기 실패:",error);
+  }
+}
+async function saveWorkEntry(){
+  if(!firebaseReady||!currentAuthUser)return;
+  const employeeId=selectedWorkEmployeeId();
+  const date=selectedWorkDate();
+  if(!employeeId){alert(t("chooseEmployee"));return;}
+
+  normalizeWorkInputs();
+  const hours=Number(document.getElementById("workHours").value)||0;
+  const minutes=Number(document.getElementById("workMinutes").value)||0;
+  const total=hours*60+minutes;
+  const employee=workEmployees.find(e=>e.id===employeeId);
+
+  await db.ref(`${workMonthPath(date.slice(0,7))}/${employeeId}/${date}`).set({
+    employeeName:employee?employee.name:"",
+    minutes:total,
+    updatedAt:firebase.database.ServerValue.TIMESTAMP,
+    updatedBy:currentAuthUser.uid
+  });
+
+  const status=document.getElementById("workSaveStatus");
+  if(status){
+    status.textContent=t("saved");
+    setTimeout(()=>{status.textContent="";},1800);
+  }
+}
+function loadMonthlyWorkReport(){
+  if(!isOwner())return;
+  const month=document.getElementById("workReportMonth")?.value||currentLocalMonth();
+  if(workMonthlyRef)workMonthlyRef.off();
+  workMonthlyRef=db.ref(workMonthPath(month));
+  workMonthlyRef.on("value",snap=>{
+    currentMonthLogs=snap.val()||{};
+    renderMonthlyWorkReport();
+  },error=>console.error("월별 근무시간 불러오기 실패:",error));
+}
+function renderMonthlyWorkReport(){
+  const list=document.getElementById("workReportList");
+  if(!list)return;
+
+  const employeeMap={};
+  workEmployees.forEach(e=>{employeeMap[e.id]=e.name;});
+  Object.keys(currentMonthLogs||{}).forEach(id=>{
+    const days=currentMonthLogs[id]||{};
+    const first=Object.values(days)[0];
+    if(!employeeMap[id]&&first&&first.employeeName)employeeMap[id]=first.employeeName;
+  });
+
+  const rows=Object.keys(employeeMap).map(id=>{
+    const days=currentMonthLogs[id]||{};
+    const entries=Object.keys(days).sort().map(date=>({
+      date,
+      minutes:Number(days[date]?.minutes||0)
+    }));
+    const total=entries.reduce((sum,e)=>sum+e.minutes,0);
+    return {id,name:employeeMap[id],entries,total};
+  }).sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+
+  if(!rows.length){
+    list.innerHTML=`<div class="reservation-empty">${t("noWorkRecords")}</div>`;
+    return;
+  }
+
+  list.innerHTML=rows.map(row=>`
+    <div class="work-report-item">
+      <div>
+        <div class="work-report-name">${escapeHtml(row.name)}</div>
+        <div class="work-detail">
+          ${row.entries.length
+            ? row.entries.map(e=>`${e.date.slice(8,10)}일 · ${formatMinutes(e.minutes)}`).join("<br>")
+            : t("noWorkRecords")}
+        </div>
+      </div>
+      <div class="work-report-total">${formatMinutes(row.total)}</div>
+    </div>
+  `).join("");
+}
+
 let reservations=[];
 let reservationRef=null;
 let latestReservationCreatedAt=0;
@@ -2136,6 +2575,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 
       attachOrderSync();
       attachReservationSync();
+      attachWorkEmployeeSync();
       setActiveScreen("homeScreen");
     }else if(user && currentUserRole==="blocked"){
       alert("등록되지 않은 계정입니다. 관리자에게 문의하세요.");
@@ -2144,6 +2584,7 @@ document.addEventListener("DOMContentLoaded",()=>{
       detachOrderSync();
       detachScheduleListener();
       detachReservationSync();
+      detachWorkSync();
       setActiveScreen("loginScreen");
 
       const accountEmail=document.getElementById("accountEmail");
@@ -2204,7 +2645,7 @@ const UI_TEXT = {
     afternoon:"오후",
     owner:"사장",
     employee:"직원",
-    accessDenied:"접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.",reservation:"예약",reservationDesc:"예약 날짜, 시간, 인원과 예약자 성함을 관리합니다.",newReservation:"새로운 예약자가 추가되었습니다.",reservationManagement:"예약 관리",reservationDate:"예약 날짜",reservationTime:"예약 시간",reservationPeople:"예약 인원",reservationName:"예약자 성함",addReservation:"예약 추가",delete:"삭제",peopleUnit:"명",noReservations:"등록된 예약이 없습니다.",fillReservation:"날짜, 시간, 인원, 성함을 모두 입력해주세요.",deleteReservation:"이 예약을 삭제할까요?",reservationPhone:"전화번호",reservationMemo:"메모 (선택)",listView:"목록 보기",calendarView:"달력 보기",searchReservation:"성함·전화번호 검색",call:"전화",complete:"방문완료",undoComplete:"완료 취소",edit:"수정",saveEdit:"수정 저장",phoneRequired:"전화번호를 입력해주세요.",deleteOwnerOnly:"예약 삭제는 사장 계정만 가능합니다."
+    accessDenied:"접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.",reservation:"예약",reservationDesc:"예약 날짜, 시간, 인원과 예약자 성함을 관리합니다.",newReservation:"새로운 예약자가 추가되었습니다.",reservationManagement:"예약 관리",reservationDate:"예약 날짜",reservationTime:"예약 시간",reservationPeople:"예약 인원",reservationName:"예약자 성함",addReservation:"예약 추가",delete:"삭제",peopleUnit:"명",noReservations:"등록된 예약이 없습니다.",fillReservation:"날짜, 시간, 인원, 성함을 모두 입력해주세요.",deleteReservation:"이 예약을 삭제할까요?",reservationPhone:"전화번호",reservationMemo:"메모 (선택)",listView:"목록 보기",calendarView:"달력 보기",searchReservation:"성함·전화번호 검색",call:"전화",complete:"방문완료",undoComplete:"완료 취소",edit:"수정",saveEdit:"수정 저장",phoneRequired:"전화번호를 입력해주세요.",deleteOwnerOnly:"예약 삭제는 사장 계정만 가능합니다.",workTime:"근무시간",workTimeDesc:"직원별 일일 근무시간을 기록하고 월별 합계를 확인합니다.",workTimeManagement:"직원 근무시간 기록",employeeManagement:"직원 관리",employeeNamePlaceholder:"직원 이름",addEmployeeButton:"직원 추가",todayWorkEntry:"근무시간 입력",selectEmployee:"직원 선택",workDate:"근무 날짜",hours:"시간",minutes:"분",saveWorkTime:"근무시간 저장",monthlyWorkReport:"월별 직원 근무시간",noEmployees:"등록된 직원이 없습니다.",saved:"저장되었습니다.",chooseEmployee:"직원을 선택해주세요.",confirmDeleteEmployee:"이 직원을 삭제할까요? 기존 근무 기록은 유지됩니다.",noWorkRecords:"해당 월의 근무 기록이 없습니다."
   },
   vi: {
     appTitle:"Hệ thống quản lý tổng hợp Dongraeok",
@@ -2248,7 +2689,7 @@ const UI_TEXT = {
     afternoon:"Ca chiều",
     owner:"Chủ",
     employee:"Nhân viên",
-    accessDenied:"Bạn không có quyền truy cập.\nTài khoản nhân viên chỉ được dùng mục đặt hàng rau.",reservation:"Đặt bàn",reservationDesc:"Quản lý ngày, giờ, số người và tên người đặt.",newReservation:"Có đặt bàn mới.",reservationManagement:"Quản lý đặt bàn",reservationDate:"Ngày đặt",reservationTime:"Giờ đặt",reservationPeople:"Số người",reservationName:"Tên người đặt",addReservation:"Thêm đặt bàn",delete:"Xóa",peopleUnit:"người",noReservations:"Chưa có đặt bàn.",fillReservation:"Vui lòng nhập đầy đủ ngày, giờ, số người và tên.",deleteReservation:"Bạn có muốn xóa đặt bàn này không?",reservationPhone:"Số điện thoại",reservationMemo:"Ghi chú (không bắt buộc)",listView:"Danh sách",calendarView:"Lịch",searchReservation:"Tìm tên hoặc số điện thoại",call:"Gọi",complete:"Đã đến",undoComplete:"Hủy hoàn tất",edit:"Sửa",saveEdit:"Lưu sửa",phoneRequired:"Vui lòng nhập số điện thoại.",deleteOwnerOnly:"Chỉ tài khoản chủ mới được xóa đặt bàn."
+    accessDenied:"Bạn không có quyền truy cập.\nTài khoản nhân viên chỉ được dùng mục đặt hàng rau.",reservation:"Đặt bàn",reservationDesc:"Quản lý ngày, giờ, số người và tên người đặt.",newReservation:"Có đặt bàn mới.",reservationManagement:"Quản lý đặt bàn",reservationDate:"Ngày đặt",reservationTime:"Giờ đặt",reservationPeople:"Số người",reservationName:"Tên người đặt",addReservation:"Thêm đặt bàn",delete:"Xóa",peopleUnit:"người",noReservations:"Chưa có đặt bàn.",fillReservation:"Vui lòng nhập đầy đủ ngày, giờ, số người và tên.",deleteReservation:"Bạn có muốn xóa đặt bàn này không?",reservationPhone:"Số điện thoại",reservationMemo:"Ghi chú (không bắt buộc)",listView:"Danh sách",calendarView:"Lịch",searchReservation:"Tìm tên hoặc số điện thoại",call:"Gọi",complete:"Đã đến",undoComplete:"Hủy hoàn tất",edit:"Sửa",saveEdit:"Lưu sửa",phoneRequired:"Vui lòng nhập số điện thoại.",deleteOwnerOnly:"Chỉ tài khoản chủ mới được xóa đặt bàn.",workTime:"Giờ làm việc",workTimeDesc:"Ghi giờ làm mỗi ngày và xem tổng theo tháng.",workTimeManagement:"Ghi giờ làm của nhân viên",employeeManagement:"Quản lý nhân viên",employeeNamePlaceholder:"Tên nhân viên",addEmployeeButton:"Thêm nhân viên",todayWorkEntry:"Nhập giờ làm",selectEmployee:"Chọn nhân viên",workDate:"Ngày làm",hours:"Giờ",minutes:"Phút",saveWorkTime:"Lưu giờ làm",monthlyWorkReport:"Tổng giờ làm theo tháng",noEmployees:"Chưa có nhân viên.",saved:"Đã lưu.",chooseEmployee:"Vui lòng chọn nhân viên.",confirmDeleteEmployee:"Xóa nhân viên này? Dữ liệu giờ làm cũ vẫn được giữ.",noWorkRecords:"Tháng này chưa có dữ liệu."
   }
 };
 
@@ -2428,6 +2869,9 @@ function applyLanguage(){
     renderScheduleWithoutReload();
   }
   renderReservations();
+  renderWorkEmployees();
+  updateWorkPreview();
+  if(isOwner())renderMonthlyWorkReport();
   if(editingReservationId){
     const btn=document.getElementById("reservationAddButton");
     if(btn)btn.textContent=t("saveEdit");
@@ -2435,6 +2879,70 @@ function applyLanguage(){
 }
 
 </script>
+
+
+<div id="workTimeScreen" class="screen">
+  <div class="work-card">
+    <button class="home-back" type="button" onclick="showHome()"><span data-i18n="mainMenu">← 메인 메뉴</span></button>
+    <button class="logout-btn" style="float:right" type="button" onclick="logoutDongrae()"><span data-i18n="logout">로그아웃</span></button>
+
+    <div class="work-title" data-i18n="workTimeManagement">직원 근무시간 기록</div>
+
+    <div id="workOwnerEmployeeSection" class="work-section">
+      <div class="work-section-title" data-i18n="employeeManagement">직원 관리</div>
+      <div class="work-employee-add">
+        <input id="newWorkEmployeeName" class="work-input" type="text" data-i18n-placeholder="employeeNamePlaceholder" placeholder="직원 이름">
+        <button class="work-primary-btn" type="button" onclick="addWorkEmployee()" data-i18n="addEmployeeButton">직원 추가</button>
+      </div>
+      <div id="workEmployeeChips" class="work-employees"></div>
+    </div>
+
+    <div class="work-section">
+      <div class="work-section-title" data-i18n="todayWorkEntry">근무시간 입력</div>
+      <div class="work-entry-grid">
+        <div>
+          <label data-i18n="selectEmployee">직원 선택</label>
+          <select id="workEmployeeSelect" class="work-select" onchange="loadWorkEntryForSelection()"></select>
+        </div>
+        <div>
+          <label data-i18n="workDate">근무 날짜</label>
+          <input id="workDate" class="work-input" type="date" onchange="loadWorkEntryForSelection()">
+        </div>
+      </div>
+
+      <div class="work-time-controls">
+        <div class="work-time-box">
+          <div class="work-time-label" data-i18n="hours">시간</div>
+          <div class="work-stepper">
+            <button type="button" onclick="changeWorkHours(-1)">−</button>
+            <input id="workHours" type="number" min="0" max="23" value="0" oninput="normalizeWorkInputs()">
+            <button type="button" onclick="changeWorkHours(1)">+</button>
+          </div>
+        </div>
+        <div class="work-time-box">
+          <div class="work-time-label" data-i18n="minutes">분</div>
+          <div class="work-stepper">
+            <button type="button" onclick="changeWorkMinutes(-1)">−</button>
+            <input id="workMinutes" type="number" min="0" max="59" value="0" oninput="normalizeWorkInputs()">
+            <button type="button" onclick="changeWorkMinutes(1)">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="workTotalPreview" class="work-total-preview">0시간 0분</div>
+      <button class="work-primary-btn" style="width:100%;margin-top:12px" type="button" onclick="saveWorkEntry()" data-i18n="saveWorkTime">근무시간 저장</button>
+      <div id="workSaveStatus" class="work-status"></div>
+    </div>
+
+    <div id="workOwnerReportSection" class="work-section">
+      <div class="work-report-head">
+        <div class="work-section-title" style="margin:0" data-i18n="monthlyWorkReport">월별 직원 근무시간</div>
+        <input id="workReportMonth" class="work-input work-month" type="month" onchange="loadMonthlyWorkReport()">
+      </div>
+      <div id="workReportList" class="work-report-list"></div>
+    </div>
+  </div>
+</div>
 
 <div id="reservationScreen" class="screen">
   <div class="reservation-card">
