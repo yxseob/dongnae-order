@@ -1513,6 +1513,383 @@ button,
   margin-bottom:10px;
 }
 
+
+/* ===== 모바일 전용 UI 보정: iPhone / Galaxy / Fold 접힘 화면 ===== */
+@media (max-width: 900px){
+  html,body{
+    width:100%;
+    max-width:100%;
+    overflow-x:hidden;
+  }
+
+  body{
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(18px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+
+  .app-shell{
+    width:100%;
+    max-width:100%;
+    padding:0;
+    margin:0 auto;
+  }
+
+  .screen{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+  }
+
+  .home-card,
+  .order-card,
+  .schedule-card,
+  .reservation-card,
+  .work-card,
+  .login-card{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    margin:0 auto;
+    padding:16px;
+    border-radius:18px;
+    box-sizing:border-box;
+  }
+
+  .home-back,
+  .logout-btn{
+    min-height:46px;
+    padding:10px 13px;
+    font-size:15px;
+    white-space:nowrap;
+  }
+
+  .home-title,
+  .reservation-title,
+  .work-title{
+    font-size:26px;
+    line-height:1.25;
+    margin:18px 0 16px;
+  }
+
+  .menu-card{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+  }
+
+  /* 예약 화면 */
+  .reservation-toolbar{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+    width:100%;
+  }
+
+  .reservation-view-buttons{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    width:100%;
+  }
+
+  .reservation-view-btn{
+    width:100%;
+    min-width:0;
+    min-height:48px;
+    padding:10px 8px;
+    font-size:15px;
+  }
+
+  .reservation-search{
+    width:100%;
+    max-width:none;
+    min-width:0;
+    height:50px;
+    font-size:16px;
+    box-sizing:border-box;
+  }
+
+  .reservation-form{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:13px;
+    width:100%;
+  }
+
+  .reservation-field,
+  .reservation-field.full{
+    grid-column:1/-1;
+    width:100%;
+    min-width:0;
+  }
+
+  .reservation-field label{
+    margin-bottom:7px;
+    font-size:15px;
+  }
+
+  .reservation-field input,
+  .reservation-field textarea{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    min-height:52px;
+    padding:12px 13px;
+    font-size:16px;
+    box-sizing:border-box;
+    -webkit-appearance:none;
+    appearance:none;
+  }
+
+  .reservation-field textarea{
+    min-height:112px;
+  }
+
+  .reservation-add-btn{
+    min-height:54px;
+    font-size:18px;
+  }
+
+  .reservation-item{
+    width:100%;
+    min-width:0;
+    box-sizing:border-box;
+  }
+
+  .reservation-actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+    width:100%;
+  }
+
+  .reservation-action{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:44px;
+    width:100%;
+    box-sizing:border-box;
+  }
+
+  .calendar-grid{
+    gap:4px;
+  }
+
+  .calendar-day{
+    min-width:0;
+    min-height:76px;
+    padding:5px;
+    overflow:hidden;
+  }
+
+  .calendar-entry{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  /* 근무시간 화면 */
+  .work-section{
+    width:100%;
+    min-width:0;
+    padding:14px;
+    box-sizing:border-box;
+  }
+
+  .work-entry-grid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:13px;
+    width:100%;
+  }
+
+  .work-entry-grid > div{
+    width:100%;
+    min-width:0;
+  }
+
+  .work-input,
+  .work-select{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    min-height:52px;
+    padding:12px 13px;
+    font-size:16px;
+    box-sizing:border-box;
+  }
+
+  input[type="date"],
+  input[type="time"],
+  input[type="month"]{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+    -webkit-appearance:none;
+    appearance:none;
+  }
+
+  .work-time-controls{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:14px;
+    width:100%;
+  }
+
+  .work-time-box{
+    width:100%;
+    min-width:0;
+    padding:14px 12px;
+    box-sizing:border-box;
+  }
+
+  .work-stepper{
+    display:grid;
+    grid-template-columns:56px minmax(0,1fr) 56px;
+    gap:10px;
+    width:100%;
+  }
+
+  .work-stepper button{
+    width:56px;
+    height:52px;
+    min-width:56px;
+    font-size:27px;
+    touch-action:manipulation;
+  }
+
+  .work-stepper input{
+    width:100%;
+    min-width:0;
+    height:52px;
+    font-size:24px;
+    box-sizing:border-box;
+  }
+
+  .work-total-preview{
+    font-size:19px;
+    padding:14px 10px;
+  }
+
+  .work-primary-btn{
+    min-height:52px;
+    font-size:16px;
+  }
+
+  .work-report-head{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+    width:100%;
+  }
+
+  .work-month{
+    width:100%;
+    min-width:0;
+  }
+
+  .work-report-item{
+    width:100%;
+    min-width:0;
+    box-sizing:border-box;
+  }
+
+  .work-report-top{
+    align-items:flex-start;
+  }
+
+  .work-report-total{
+    flex:0 0 auto;
+    text-align:right;
+    font-size:17px;
+  }
+
+  .work-day-row{
+    align-items:center;
+  }
+
+  .work-day-text{
+    min-width:0;
+    overflow-wrap:anywhere;
+  }
+
+  .work-delete-btn{
+    min-height:40px;
+    padding:8px 10px;
+  }
+
+  .work-employee-add{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+
+  /* 긴 표와 발주 화면은 가로 스크롤 허용 */
+  .schedule-scroll,
+  .order-sheet-wrap,
+  .table-wrap{
+    width:100%;
+    max-width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  /* iOS 자동 확대 방지 */
+  input,
+  select,
+  textarea,
+  button{
+    font-size:16px;
+  }
+}
+
+@media (max-width: 390px){
+  body{
+    padding-left:8px;
+    padding-right:8px;
+  }
+
+  .home-card,
+  .order-card,
+  .schedule-card,
+  .reservation-card,
+  .work-card,
+  .login-card{
+    padding:13px;
+    border-radius:16px;
+  }
+
+  .home-back,
+  .logout-btn{
+    padding:9px 11px;
+    font-size:14px;
+  }
+
+  .home-title,
+  .reservation-title,
+  .work-title{
+    font-size:23px;
+  }
+
+  .work-stepper{
+    grid-template-columns:52px minmax(0,1fr) 52px;
+    gap:8px;
+  }
+
+  .work-stepper button{
+    width:52px;
+    min-width:52px;
+  }
+
+  .reservation-actions{
+    grid-template-columns:1fr;
+  }
+}
+
 </style>
 </head>
 
@@ -3075,5 +3452,56 @@ function applyLanguage(){
     </div>
   </div>
 </div>
+<script>
+
+(function(){
+  function bindHold(button, action){
+    if(!button || button.dataset.holdBound==="1") return;
+    button.dataset.holdBound="1";
+    let delayTimer=null;
+    let repeatTimer=null;
+
+    const stop=()=>{
+      clearTimeout(delayTimer);
+      clearInterval(repeatTimer);
+      delayTimer=null;
+      repeatTimer=null;
+    };
+
+    button.addEventListener("pointerdown",()=>{
+      stop();
+      delayTimer=setTimeout(()=>{
+        repeatTimer=setInterval(action,110);
+      },420);
+    });
+    ["pointerup","pointercancel","pointerleave"].forEach(type=>{
+      button.addEventListener(type,stop);
+    });
+  }
+
+  function bindWorkHoldButtons(){
+    document.querySelectorAll('.work-stepper').forEach(stepper=>{
+      const buttons=stepper.querySelectorAll('button');
+      if(buttons.length!==2) return;
+      const input=stepper.querySelector('input');
+      if(!input) return;
+
+      if(input.id==="workHours"){
+        bindHold(buttons[0],()=>changeWorkHours(-1));
+        bindHold(buttons[1],()=>changeWorkHours(1));
+      }else if(input.id==="workMinutes"){
+        bindHold(buttons[0],()=>changeWorkMinutes(-1));
+        bindHold(buttons[1],()=>changeWorkMinutes(1));
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded",bindWorkHoldButtons);
+  document.addEventListener("click",()=>{
+    setTimeout(bindWorkHoldButtons,0);
+  });
+})();
+
+</script>
 </body>
 </html>
