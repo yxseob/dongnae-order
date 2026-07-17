@@ -1919,9 +1919,138 @@ button,
   .work-calendar-entry strong{font-size:11px}
 }
 
+
+.theme-toggle-btn{
+  min-width:112px;
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+}
+html[data-theme="dark"] body{
+  background:#111318 !important;
+  color:#f2f3f5 !important;
+}
+html[data-theme="dark"] .app-shell,
+html[data-theme="dark"] .screen{
+  background:#111318 !important;
+}
+html[data-theme="dark"] .login-card,
+html[data-theme="dark"] .home-card,
+html[data-theme="dark"] .page-card,
+html[data-theme="dark"] .schedule-card,
+html[data-theme="dark"] .reservation-card,
+html[data-theme="dark"] .work-card,
+html[data-theme="dark"] .order-card,
+html[data-theme="dark"] .modal-content{
+  background:#1b1e24 !important;
+  color:#f2f3f5 !important;
+  border-color:#343943 !important;
+  box-shadow:0 12px 35px rgba(0,0,0,.38) !important;
+}
+html[data-theme="dark"] .home-title,
+html[data-theme="dark"] .login-title,
+html[data-theme="dark"] .page-title,
+html[data-theme="dark"] .work-section-title,
+html[data-theme="dark"] .reservation-title,
+html[data-theme="dark"] .menu-name,
+html[data-theme="dark"] label,
+html[data-theme="dark"] strong{
+  color:#f4f5f7 !important;
+}
+html[data-theme="dark"] .home-subtitle,
+html[data-theme="dark"] .login-subtitle,
+html[data-theme="dark"] .menu-desc,
+html[data-theme="dark"] .language-label,
+html[data-theme="dark"] .reservation-empty,
+html[data-theme="dark"] .work-help,
+html[data-theme="dark"] .muted{
+  color:#aeb4bf !important;
+}
+html[data-theme="dark"] .menu-card,
+html[data-theme="dark"] .language-box,
+html[data-theme="dark"] .account-bar,
+html[data-theme="dark"] .work-report-item,
+html[data-theme="dark"] .reservation-item,
+html[data-theme="dark"] .work-employee-item,
+html[data-theme="dark"] .work-calendar-day,
+html[data-theme="dark"] .schedule-table,
+html[data-theme="dark"] .order-row,
+html[data-theme="dark"] .item-row{
+  background:#23272f !important;
+  color:#f2f3f5 !important;
+  border-color:#3a404b !important;
+}
+html[data-theme="dark"] .menu-card:hover{
+  background:#2a2f38 !important;
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select,
+html[data-theme="dark"] .work-input,
+html[data-theme="dark"] .reservation-input{
+  background:#15181e !important;
+  color:#f5f6f8 !important;
+  border-color:#454c58 !important;
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{
+  color:#858c98 !important;
+}
+html[data-theme="dark"] button:not(.menu-card):not(.login-button):not(.work-delete-btn):not(.reservation-delete-btn){
+  border-color:#4a515d;
+}
+html[data-theme="dark"] .language-btn,
+html[data-theme="dark"] .work-view-btn,
+html[data-theme="dark"] .home-back,
+html[data-theme="dark"] .logout-btn{
+  background:#292e37 !important;
+  color:#eef0f3 !important;
+  border-color:#454c58 !important;
+}
+html[data-theme="dark"] .language-btn.active,
+html[data-theme="dark"] .work-view-btn.active,
+html[data-theme="dark"] .theme-toggle-btn.active{
+  background:#f2f3f5 !important;
+  color:#17191e !important;
+  border-color:#f2f3f5 !important;
+}
+html[data-theme="dark"] .work-calendar-day.empty{
+  background:#171a20 !important;
+}
+html[data-theme="dark"] .work-calendar-entry{
+  background:#343a45 !important;
+  color:#f2f3f5 !important;
+}
+html[data-theme="dark"] .work-calendar-head-grid>div{
+  color:#c4c9d1 !important;
+}
+html[data-theme="dark"] table,
+html[data-theme="dark"] th,
+html[data-theme="dark"] td{
+  border-color:#3d434e !important;
+}
+html[data-theme="dark"] th{
+  background:#292e37 !important;
+  color:#f4f5f7 !important;
+}
+html[data-theme="dark"] td{
+  background:#20242b;
+  color:#f2f3f5;
+}
+html[data-theme="dark"] .cloud-status{
+  background:#20242b !important;
+  border-color:#3d434e !important;
+}
+
 </style>
 </head>
 
+<script>
+(function(){
+  const saved=localStorage.getItem("dongrae_theme")||"light";
+  document.documentElement.dataset.theme=saved==="dark"?"dark":"light";
+})();
+</script>
 <body>
 
 <div class="app-shell">
@@ -1958,6 +2087,7 @@ button,
         <span class="language-label" data-i18n="language">언어</span>
         <button id="langKoBtn" class="language-btn active" type="button" onclick="setLanguage('ko')">한국어</button>
         <button id="langViBtn" class="language-btn" type="button" onclick="setLanguage('vi')">Tiếng Việt</button>
+        <button id="darkModeBtn" class="language-btn theme-toggle-btn" type="button" onclick="toggleDarkMode()">🌙 <span data-i18n="darkMode">다크모드</span></button>
       </div>
       <div id="cloudStatus" class="cloud-status offline">🔒 로그인 필요</div>
       <div class="account-bar">
@@ -3195,7 +3325,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 const UI_TEXT = {
   ko: {
     appTitle:"동래옥 통합 관리 시스템",
-    language:"언어",
+    language:"언어",darkMode:"다크모드",lightMode:"라이트모드",
     chooseMenu:"원하는 메뉴를 선택하세요.",
     order:"발주",
     orderDesc:"주방·홀·야채 품목을 선택하고 발주서 이미지를 생성합니다.",
@@ -3239,7 +3369,7 @@ const UI_TEXT = {
   },
   vi: {
     appTitle:"Hệ thống quản lý tổng hợp Dongraeok",
-    language:"Ngôn ngữ",
+    language:"Ngôn ngữ",darkMode:"Chế độ tối",lightMode:"Chế độ sáng",
     chooseMenu:"Vui lòng chọn chức năng.",
     order:"Đặt hàng",
     orderDesc:"Chọn hàng bếp, sảnh và rau rồi tạo phiếu đặt hàng.",
@@ -3394,6 +3524,25 @@ const UNIT_VI = {
 };
 
 let currentLanguage=localStorage.getItem("dongrae_language")||"ko";
+let currentTheme=localStorage.getItem("dongrae_theme")||"light";
+
+function applyTheme(){
+  const dark=currentTheme==="dark";
+  document.documentElement.dataset.theme=dark?"dark":"light";
+  const btn=document.getElementById("darkModeBtn");
+  if(btn){
+    btn.classList.toggle("active",dark);
+    btn.innerHTML=dark
+      ? `☀️ <span data-i18n="lightMode">${t("lightMode")}</span>`
+      : `🌙 <span data-i18n="darkMode">${t("darkMode")}</span>`;
+  }
+}
+
+function toggleDarkMode(){
+  currentTheme=currentTheme==="dark"?"light":"dark";
+  localStorage.setItem("dongrae_theme",currentTheme);
+  applyTheme();
+}
 
 function t(key){
   return (UI_TEXT[currentLanguage]&&UI_TEXT[currentLanguage][key])||UI_TEXT.ko[key]||key;
@@ -3448,6 +3597,7 @@ function applyLanguage(){
   const viBtn=document.getElementById("langViBtn");
   if(koBtn) koBtn.classList.toggle("active",currentLanguage==="ko");
   if(viBtn) viBtn.classList.toggle("active",currentLanguage==="vi");
+  applyTheme();
 
   const badge=document.getElementById("roleBadge");
   if(badge && currentUserRole){
