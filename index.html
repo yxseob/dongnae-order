@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>동래옥</title>
+<title>동래옥 발주</title>
 
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
@@ -1898,6 +1898,27 @@ button,
   -webkit-touch-callout:none;
 }
 
+
+.work-view-buttons{display:flex;gap:8px;margin:10px 0 12px}
+.work-view-btn{flex:1;min-height:44px;border:1px solid #d4d8de;border-radius:10px;background:#fff;font-weight:900;cursor:pointer}
+.work-view-btn.active{background:#222;color:#fff;border-color:#222}
+.work-calendar-wrap{display:none;margin-top:10px}
+.work-calendar-wrap.show{display:block}
+.work-calendar-head-grid,.work-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.work-calendar-head-grid{margin-bottom:6px}
+.work-calendar-head-grid>div{text-align:center;font-size:13px;font-weight:900;color:#666;padding:5px 2px}
+.work-calendar-day{min-height:120px;padding:7px;border:1px solid #dfe2e6;border-radius:10px;background:#fff;overflow:hidden}
+.work-calendar-day.empty{background:#f6f6f6}
+.work-calendar-date{font-size:14px;font-weight:900;margin-bottom:6px}
+.work-calendar-entry{margin-top:5px;padding:6px 7px;border-radius:7px;background:#f1e9e2;font-size:11px;font-weight:800;line-height:1.35;overflow-wrap:anywhere}
+.work-calendar-entry strong{display:block;font-size:12px}
+@media(max-width:700px){
+  .work-calendar-head-grid,.work-calendar-grid{gap:4px}
+  .work-calendar-day{min-height:88px;padding:5px}
+  .work-calendar-entry{padding:4px 5px;font-size:10px}
+  .work-calendar-entry strong{font-size:11px}
+}
+
 </style>
 </head>
 
@@ -2789,6 +2810,69 @@ async function deleteEntireWorkMonth(){
   await db.ref(workMonthPath(month)).remove();
 }
 
+
+let workReportView="list";
+
+function setWorkReportView(view){
+  workReportView=view==="calendar"?"calendar":"list";
+  const list=document.getElementById("workReportList");
+  const calendar=document.getElementById("workCalendarWrap");
+  document.getElementById("workListViewBtn")?.classList.toggle("active",workReportView==="list");
+  document.getElementById("workCalendarViewBtn")?.classList.toggle("active",workReportView==="calendar");
+  if(list) list.style.display=workReportView==="list"?"grid":"none";
+  if(calendar) calendar.classList.toggle("show",workReportView==="calendar");
+  if(workReportView==="calendar") renderWorkCalendar();
+}
+
+function renderWorkCalendar(){
+  const grid=document.getElementById("workCalendarGrid");
+  const monthInput=document.getElementById("workReportMonth");
+  if(!grid||!monthInput)return;
+
+  const monthValue=monthInput.value||currentLocalMonth();
+  const parts=monthValue.split("-").map(Number);
+  const year=parts[0], month=parts[1];
+  if(!year||!month)return;
+
+  const first=new Date(year,month-1,1);
+  const last=new Date(year,month,0);
+  const mondayIndex=(first.getDay()+6)%7;
+
+  const employeeNames={};
+  workEmployees.forEach(e=>employeeNames[e.id]=e.name);
+
+  let output="";
+  for(let i=0;i<mondayIndex;i++) output+='<div class="work-calendar-day empty"></div>';
+
+  for(let day=1;day<=last.getDate();day++){
+    const date=`${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const entries=[];
+
+    Object.keys(currentMonthLogs||{}).forEach(employeeId=>{
+      const record=currentMonthLogs[employeeId]?.[date];
+      if(record&&Number(record.minutes||0)>0){
+        entries.push({
+          name:record.employeeName||employeeNames[employeeId]||"직원",
+          minutes:Number(record.minutes||0)
+        });
+      }
+    });
+
+    entries.sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+
+    output+=`<div class="work-calendar-day">
+      <div class="work-calendar-date">${day}</div>
+      ${entries.map(entry=>`
+        <div class="work-calendar-entry">
+          <strong>${escapeHtml(entry.name)}</strong>
+          ${formatMinutes(entry.minutes)}
+        </div>`).join("")}
+    </div>`;
+  }
+
+  grid.innerHTML=output;
+}
+
 function renderMonthlyWorkReport(){
   const list=document.getElementById("workReportList");
   if(!list)return;
@@ -2813,6 +2897,8 @@ function renderMonthlyWorkReport(){
 
   if(!rows.length){
     list.innerHTML=`<div class="reservation-empty">${t("noWorkRecords")}</div>`;
+    renderWorkCalendar();
+    setWorkReportView(workReportView);
     return;
   }
 
@@ -2838,6 +2924,8 @@ function renderMonthlyWorkReport(){
       </div>
     </div>
   `).join("");
+  renderWorkCalendar();
+  setWorkReportView(workReportView);
 }
 
 let reservations=[];
@@ -3147,7 +3235,7 @@ const UI_TEXT = {
     afternoon:"오후",
     owner:"사장",
     employee:"직원",
-    accessDenied:"접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.",reservation:"예약",reservationDesc:"예약 날짜, 시간, 인원과 예약자 성함을 관리합니다.",newReservation:"새로운 예약자가 추가되었습니다.",reservationManagement:"예약 관리",reservationDate:"예약 날짜",reservationTime:"예약 시간",reservationPeople:"예약 인원",reservationName:"예약자 성함",addReservation:"예약 추가",delete:"삭제",peopleUnit:"명",noReservations:"등록된 예약이 없습니다.",fillReservation:"날짜, 시간, 인원, 성함을 모두 입력해주세요.",deleteReservation:"이 예약을 삭제할까요?",reservationPhone:"전화번호",reservationMemo:"메모 (선택)",listView:"목록 보기",calendarView:"달력 보기",searchReservation:"성함·전화번호 검색",call:"전화",complete:"방문완료",undoComplete:"완료 취소",edit:"수정",saveEdit:"수정 저장",phoneRequired:"전화번호를 입력해주세요.",deleteOwnerOnly:"예약 삭제는 사장 계정만 가능합니다.",workTime:"근무시간",workTimeDesc:"직원별 일일 근무시간을 기록하고 월별 합계를 확인합니다.",workTimeManagement:"직원 근무시간 기록",employeeManagement:"직원 관리",employeeNamePlaceholder:"직원 이름",addEmployeeButton:"직원 추가",todayWorkEntry:"근무시간 입력",selectEmployee:"직원 선택",workDate:"근무 날짜",hours:"시간",minutes:"분",saveWorkTime:"근무시간 저장",monthlyWorkReport:"월별 직원 근무시간",noEmployees:"등록된 직원이 없습니다.",saved:"저장되었습니다.",chooseEmployee:"직원을 선택해주세요.",confirmDeleteEmployee:"이 직원을 삭제할까요? 기존 근무 기록은 유지됩니다.",noWorkRecords:"해당 월의 근무 기록이 없습니다.",deleteWorkDay:"이 날짜의 근무기록을 삭제하시겠습니까?",deleteEmployeeMonth:"이 직원의 해당 월 근무기록을 모두 삭제하시겠습니까?",deleteEntireMonth:"이번 달 기록 전체 삭제",deleteEntireMonthConfirm:"선택한 달의 모든 직원 근무기록을 삭제하시겠습니까?",deleteDay:"삭제",deleteEmployeeRecords:"이 직원 월 기록 삭제"
+    accessDenied:"접근 권한이 없습니다.\n직원 계정은 야채 발주만 사용할 수 있습니다.",reservation:"예약",reservationDesc:"예약 날짜, 시간, 인원과 예약자 성함을 관리합니다.",newReservation:"새로운 예약자가 추가되었습니다.",reservationManagement:"예약 관리",reservationDate:"예약 날짜",reservationTime:"예약 시간",reservationPeople:"예약 인원",reservationName:"예약자 성함",addReservation:"예약 추가",delete:"삭제",peopleUnit:"명",noReservations:"등록된 예약이 없습니다.",fillReservation:"날짜, 시간, 인원, 성함을 모두 입력해주세요.",deleteReservation:"이 예약을 삭제할까요?",reservationPhone:"전화번호",reservationMemo:"메모 (선택)",listView:"목록 보기",calendarView:"달력 보기",searchReservation:"성함·전화번호 검색",call:"전화",complete:"방문완료",undoComplete:"완료 취소",edit:"수정",saveEdit:"수정 저장",phoneRequired:"전화번호를 입력해주세요.",deleteOwnerOnly:"예약 삭제는 사장 계정만 가능합니다.",workTime:"근무시간",workTimeDesc:"직원별 일일 근무시간을 기록하고 월별 합계를 확인합니다.",workTimeManagement:"직원 근무시간 기록",employeeManagement:"직원 관리",employeeNamePlaceholder:"직원 이름",addEmployeeButton:"직원 추가",todayWorkEntry:"근무시간 입력",selectEmployee:"직원 선택",workDate:"근무 날짜",hours:"시간",minutes:"분",saveWorkTime:"근무시간 저장",monthlyWorkReport:"월별 직원 근무시간",noEmployees:"등록된 직원이 없습니다.",saved:"저장되었습니다.",chooseEmployee:"직원을 선택해주세요.",confirmDeleteEmployee:"이 직원을 삭제할까요? 기존 근무 기록은 유지됩니다.",noWorkRecords:"해당 월의 근무 기록이 없습니다.",deleteWorkDay:"이 날짜의 근무기록을 삭제하시겠습니까?",deleteEmployeeMonth:"이 직원의 해당 월 근무기록을 모두 삭제하시겠습니까?",deleteEntireMonth:"이번 달 기록 전체 삭제",deleteEntireMonthConfirm:"선택한 달의 모든 직원 근무기록을 삭제하시겠습니까?",deleteDay:"삭제",deleteEmployeeRecords:"이 직원 월 기록 삭제",workListView:"목록 보기",workCalendarView:"달력 보기",mon:"월",tue:"화",wed:"수",thu:"목",fri:"금",sat:"토",sun:"일"
   },
   vi: {
     appTitle:"Hệ thống quản lý tổng hợp Dongraeok",
@@ -3191,7 +3279,7 @@ const UI_TEXT = {
     afternoon:"Ca chiều",
     owner:"Chủ",
     employee:"Nhân viên",
-    accessDenied:"Bạn không có quyền truy cập.\nTài khoản nhân viên chỉ được dùng mục đặt hàng rau.",reservation:"Đặt bàn",reservationDesc:"Quản lý ngày, giờ, số người và tên người đặt.",newReservation:"Có đặt bàn mới.",reservationManagement:"Quản lý đặt bàn",reservationDate:"Ngày đặt",reservationTime:"Giờ đặt",reservationPeople:"Số người",reservationName:"Tên người đặt",addReservation:"Thêm đặt bàn",delete:"Xóa",peopleUnit:"người",noReservations:"Chưa có đặt bàn.",fillReservation:"Vui lòng nhập đầy đủ ngày, giờ, số người và tên.",deleteReservation:"Bạn có muốn xóa đặt bàn này không?",reservationPhone:"Số điện thoại",reservationMemo:"Ghi chú (không bắt buộc)",listView:"Danh sách",calendarView:"Lịch",searchReservation:"Tìm tên hoặc số điện thoại",call:"Gọi",complete:"Đã đến",undoComplete:"Hủy hoàn tất",edit:"Sửa",saveEdit:"Lưu sửa",phoneRequired:"Vui lòng nhập số điện thoại.",deleteOwnerOnly:"Chỉ tài khoản chủ mới được xóa đặt bàn.",workTime:"Giờ làm việc",workTimeDesc:"Ghi giờ làm mỗi ngày và xem tổng theo tháng.",workTimeManagement:"Ghi giờ làm của nhân viên",employeeManagement:"Quản lý nhân viên",employeeNamePlaceholder:"Tên nhân viên",addEmployeeButton:"Thêm nhân viên",todayWorkEntry:"Nhập giờ làm",selectEmployee:"Chọn nhân viên",workDate:"Ngày làm",hours:"Giờ",minutes:"Phút",saveWorkTime:"Lưu giờ làm",monthlyWorkReport:"Tổng giờ làm theo tháng",noEmployees:"Chưa có nhân viên.",saved:"Đã lưu.",chooseEmployee:"Vui lòng chọn nhân viên.",confirmDeleteEmployee:"Xóa nhân viên này? Dữ liệu giờ làm cũ vẫn được giữ.",noWorkRecords:"Tháng này chưa có dữ liệu.",deleteWorkDay:"Xóa giờ làm của ngày này?",deleteEmployeeMonth:"Xóa toàn bộ giờ làm tháng này của nhân viên này?",deleteEntireMonth:"Xóa toàn bộ dữ liệu tháng này",deleteEntireMonthConfirm:"Xóa toàn bộ dữ liệu giờ làm của tháng đã chọn?",deleteDay:"Xóa",deleteEmployeeRecords:"Xóa dữ liệu tháng của nhân viên"
+    accessDenied:"Bạn không có quyền truy cập.\nTài khoản nhân viên chỉ được dùng mục đặt hàng rau.",reservation:"Đặt bàn",reservationDesc:"Quản lý ngày, giờ, số người và tên người đặt.",newReservation:"Có đặt bàn mới.",reservationManagement:"Quản lý đặt bàn",reservationDate:"Ngày đặt",reservationTime:"Giờ đặt",reservationPeople:"Số người",reservationName:"Tên người đặt",addReservation:"Thêm đặt bàn",delete:"Xóa",peopleUnit:"người",noReservations:"Chưa có đặt bàn.",fillReservation:"Vui lòng nhập đầy đủ ngày, giờ, số người và tên.",deleteReservation:"Bạn có muốn xóa đặt bàn này không?",reservationPhone:"Số điện thoại",reservationMemo:"Ghi chú (không bắt buộc)",listView:"Danh sách",calendarView:"Lịch",searchReservation:"Tìm tên hoặc số điện thoại",call:"Gọi",complete:"Đã đến",undoComplete:"Hủy hoàn tất",edit:"Sửa",saveEdit:"Lưu sửa",phoneRequired:"Vui lòng nhập số điện thoại.",deleteOwnerOnly:"Chỉ tài khoản chủ mới được xóa đặt bàn.",workTime:"Giờ làm việc",workTimeDesc:"Ghi giờ làm mỗi ngày và xem tổng theo tháng.",workTimeManagement:"Ghi giờ làm của nhân viên",employeeManagement:"Quản lý nhân viên",employeeNamePlaceholder:"Tên nhân viên",addEmployeeButton:"Thêm nhân viên",todayWorkEntry:"Nhập giờ làm",selectEmployee:"Chọn nhân viên",workDate:"Ngày làm",hours:"Giờ",minutes:"Phút",saveWorkTime:"Lưu giờ làm",monthlyWorkReport:"Tổng giờ làm theo tháng",noEmployees:"Chưa có nhân viên.",saved:"Đã lưu.",chooseEmployee:"Vui lòng chọn nhân viên.",confirmDeleteEmployee:"Xóa nhân viên này? Dữ liệu giờ làm cũ vẫn được giữ.",noWorkRecords:"Tháng này chưa có dữ liệu.",deleteWorkDay:"Xóa giờ làm của ngày này?",deleteEmployeeMonth:"Xóa toàn bộ giờ làm tháng này của nhân viên này?",deleteEntireMonth:"Xóa toàn bộ dữ liệu tháng này",deleteEntireMonthConfirm:"Xóa toàn bộ dữ liệu giờ làm của tháng đã chọn?",deleteDay:"Xóa",deleteEmployeeRecords:"Xóa dữ liệu tháng của nhân viên",workListView:"Danh sách",workCalendarView:"Lịch",mon:"T2",tue:"T3",wed:"T4",thu:"T5",fri:"T6",sat:"T7",sun:"CN"
   }
 };
 
@@ -3441,10 +3529,25 @@ function applyLanguage(){
         <div class="work-section-title" style="margin:0" data-i18n="monthlyWorkReport">월별 직원 근무시간</div>
         <input id="workReportMonth" class="work-input work-month" type="month" onchange="loadMonthlyWorkReport()">
       </div>
+
+      <div class="work-view-buttons">
+        <button id="workListViewBtn" class="work-view-btn active" type="button" onclick="setWorkReportView('list')" data-i18n="workListView">목록 보기</button>
+        <button id="workCalendarViewBtn" class="work-view-btn" type="button" onclick="setWorkReportView('calendar')" data-i18n="workCalendarView">달력 보기</button>
+      </div>
+
       <div class="work-month-delete-wrap">
         <button class="work-delete-btn dark" type="button" onclick="deleteEntireWorkMonth()" data-i18n="deleteEntireMonth">이번 달 기록 전체 삭제</button>
       </div>
+
       <div id="workReportList" class="work-report-list"></div>
+
+      <div id="workCalendarWrap" class="work-calendar-wrap">
+        <div class="work-calendar-head-grid">
+          <div data-i18n="mon">월</div><div data-i18n="tue">화</div><div data-i18n="wed">수</div>
+          <div data-i18n="thu">목</div><div data-i18n="fri">금</div><div data-i18n="sat">토</div><div data-i18n="sun">일</div>
+        </div>
+        <div id="workCalendarGrid" class="work-calendar-grid"></div>
+      </div>
     </div>
   </div>
 </div>
