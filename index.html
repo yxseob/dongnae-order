@@ -2960,26 +2960,48 @@ function playAttendanceDingDong(){
     prepareAttendanceAudio();
     const ctx=attendanceAudioContext;
     if(!ctx)return;
-    const now=ctx.currentTime;
-    const master=ctx.createGain();
-    master.gain.setValueAtTime(0.0001,now);
-    master.gain.exponentialRampToValueAtTime(0.85,now+0.02);
-    master.gain.exponentialRampToValueAtTime(0.0001,now+1.05);
-    master.connect(ctx.destination);
+    const now=ctx.currentTime+0.02;
 
-    [[784,0,0.42],[988,0.33,0.68]].forEach(([frequency,delay,duration])=>{
-      const osc=ctx.createOscillator();
-      const gain=ctx.createGain();
-      osc.type="sine";
-      osc.frequency.setValueAtTime(frequency,now+delay);
-      gain.gain.setValueAtTime(0.0001,now+delay);
-      gain.gain.exponentialRampToValueAtTime(0.75,now+delay+0.025);
-      gain.gain.exponentialRampToValueAtTime(0.0001,now+delay+duration);
-      osc.connect(gain);
-      gain.connect(master);
-      osc.start(now+delay);
-      osc.stop(now+delay+duration+0.05);
+    // 작은 휴대폰·태블릿 스피커에서도 또렷하게 들리는 강한 2음 차임
+    const compressor=ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-18,now);
+    compressor.knee.setValueAtTime(10,now);
+    compressor.ratio.setValueAtTime(8,now);
+    compressor.attack.setValueAtTime(0.002,now);
+    compressor.release.setValueAtTime(0.22,now);
+
+    const master=ctx.createGain();
+    master.gain.setValueAtTime(0.95,now);
+    master.connect(compressor);
+    compressor.connect(ctx.destination);
+
+    const notes=[
+      {frequency:1046.5,delay:0,duration:0.34},
+      {frequency:783.99,delay:0.30,duration:0.55}
+    ];
+
+    notes.forEach(note=>{
+      // 기본음 + 약한 배음을 겹쳐서 단순 삐 소리가 아닌 차임벨처럼 들리게 함
+      [[1,"triangle",0.72],[2,"sine",0.24],[0.5,"sine",0.16]].forEach(([ratio,type,level])=>{
+        const osc=ctx.createOscillator();
+        const gain=ctx.createGain();
+        const start=now+note.delay;
+        const end=start+note.duration;
+        osc.type=type;
+        osc.frequency.setValueAtTime(note.frequency*ratio,start);
+        gain.gain.setValueAtTime(0.0001,start);
+        gain.gain.exponentialRampToValueAtTime(level,start+0.008);
+        gain.gain.exponentialRampToValueAtTime(0.18,start+0.10);
+        gain.gain.exponentialRampToValueAtTime(0.0001,end);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(start);
+        osc.stop(end+0.03);
+      });
     });
+
+    // 화면을 보고 있지 않아도 버튼 처리 여부를 바로 느끼도록 짧은 진동 추가
+    if(navigator.vibrate)navigator.vibrate([90,55,130]);
   }catch(error){
     console.warn("출퇴근 알림음 재생 실패:",error);
   }
@@ -3018,7 +3040,7 @@ function speakAttendanceMessage(message){
 function playAttendanceSuccess(type){
   playAttendanceDingDong();
   const message=type==="in"?"정상 출근 되었습니다.":"정상 퇴근 되었습니다. 수고하셨습니다.";
-  setTimeout(()=>speakAttendanceMessage(message),720);
+  setTimeout(()=>speakAttendanceMessage(message),760);
 }
 
 async function clockInNow(){
