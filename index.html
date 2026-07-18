@@ -2634,6 +2634,11 @@ function todayLocalISO(){
   const offset=d.getTimezoneOffset();
   return new Date(d.getTime()-offset*60000).toISOString().slice(0,10);
 }
+function localISOFromTimestamp(timestamp){
+  const d=new Date(Number(timestamp)||Date.now());
+  const offset=d.getTimezoneOffset();
+  return new Date(d.getTime()-offset*60000).toISOString().slice(0,10);
+}
 function currentLocalMonth(){ return todayLocalISO().slice(0,7); }
 
 function attachWorkEmployeeSync(){
@@ -2944,22 +2949,52 @@ async function clockOutNow(){
   if(!isAttendance())return;
   const employeeId=document.getElementById("attendanceEmployeeSelect")?.value||"";
   if(!employeeId){alert("직원을 선택해주세요.");return;}
+
   const ref=db.ref(attendanceOpenPath(employeeId));
-  const snap=await ref.once("value");
-  const open=snap.val();
-  if(!open||!open.clockInAt){alert("출근 기록이 없습니다.");return;}
-  const now=Date.now();
-  const date=todayLocalISO();
-  const minutes=roundedPaidMinutes(Number(open.clockInAt),now);
-  const logRef=db.ref(`${workMonthPath(date.slice(0,7))}/${employeeId}/${date}`);
-  const existingSnap=await logRef.once("value");
-  const existing=existingSnap.val()||{};
-  const total=Number(existing.minutes||0)+minutes;
-  await logRef.set({employeeName:open.employeeName||"",minutes:total,updatedAt:firebase.database.ServerValue.TIMESTAMP,updatedBy:currentAuthUser.uid});
-  await db.ref(attendanceHistoryPath(date,employeeId)).push().set({type:"out",timestamp:now,clockInAt:Number(open.clockInAt),paidMinutes:minutes});
-  await ref.remove();
-  alert(`${open.employeeName||"직원"}님 퇴근 처리되었습니다.\n이번 근무 인정시간: ${formatMinutes(minutes)}`);
-  resetAttendanceSelection();
+
+  try{
+    const snap=await ref.once("value");
+    const open=snap.val();
+    if(!open||!open.clockInAt){alert("출근 기록이 없습니다.");return;}
+
+    const now=Date.now();
+    const clockInAt=Number(open.clockInAt);
+    // 야간 근무도 출근한 날짜의 근무기록으로 저장합니다.
+    const date=localISOFromTimestamp(clockInAt);
+    const minutes=roundedPaidMinutes(clockInAt,now);
+    const logRef=db.ref(`${workMonthPath(date.slice(0,7))}/${employeeId}/${date}`);
+
+    // 같은 직원이 같은 날 여러 번 근무한 경우 기존 시간을 덮어쓰지 않고 안전하게 누적합니다.
+    await logRef.transaction(current=>{
+      const value=current||{};
+      return {
+        ...value,
+        employeeName:open.employeeName||value.employeeName||"",
+        minutes:Number(value.minutes||0)+minutes,
+        lastClockInAt:clockInAt,
+        lastClockOutAt:now,
+        source:"attendance",
+        updatedAt:firebase.database.ServerValue.TIMESTAMP,
+        updatedBy:currentAuthUser.uid
+      };
+    });
+
+    await db.ref(attendanceHistoryPath(date,employeeId)).push().set({
+      type:"out",
+      timestamp:now,
+      clockInAt,
+      clockOutAt:now,
+      paidMinutes:minutes,
+      employeeName:open.employeeName||""
+    });
+
+    await ref.remove();
+    alert(`${open.employeeName||"직원"}님 퇴근 처리되었습니다.\n이번 근무 인정시간: ${formatMinutes(minutes)}\n직원 근무시간 기록에 자동 반영되었습니다.`);
+    resetAttendanceSelection();
+  }catch(error){
+    console.error("퇴근 처리 실패:",error);
+    alert("퇴근 처리 또는 근무시간 기록 반영에 실패했습니다. 잠시 후 다시 시도해주세요.");
+  }
 }
 
 function loadMonthlyWorkReport(){
