@@ -2815,10 +2815,10 @@ async function saveWorkEntry(){
 let attendanceStatusRef=null;
 
 function attendanceOpenPath(employeeId){
-  return `dongrae/attendanceOpen/${employeeId}`;
+  return `dongrae/workLogs/_attendanceOpen/${employeeId}`;
 }
 function attendanceHistoryPath(date,employeeId){
-  return `dongrae/attendanceHistory/${date}/${employeeId}`;
+  return `dongrae/workLogs/_attendanceHistory/${date}/${employeeId}`;
 }
 function renderAttendanceEmployeeSelect(){
   const select=document.getElementById("attendanceEmployeeSelect");
@@ -2829,13 +2829,13 @@ function renderAttendanceEmployeeSelect(){
     select.innerHTML='<option value="">등록된 직원이 없습니다</option>';
     select.value="";
   }else{
-    select.innerHTML=workEmployees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
+    select.innerHTML='<option value="">직원을 선택해주세요</option>'+workEmployees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
 
-    // 기존 선택 직원이 있으면 유지하고, 없으면 첫 번째 직원을 자동 선택합니다.
-    if(workEmployees.some(e=>e.id===previous)){
+    // 자동 선택하지 않고, 사용자가 직접 선택한 값만 유지합니다.
+    if(previous && workEmployees.some(e=>e.id===previous)){
       select.value=previous;
     }else{
-      select.value=workEmployees[0].id;
+      select.value="";
     }
   }
 
@@ -2897,6 +2897,21 @@ function watchAttendanceStatus(){
     if(outBtn)outBtn.disabled=true;
   });
 }
+function resetAttendanceSelection(){
+  if(attendanceStatusRef)attendanceStatusRef.off();
+  attendanceStatusRef=null;
+  const select=document.getElementById("attendanceEmployeeSelect");
+  const status=document.getElementById("attendanceStatusText");
+  const inBtn=document.getElementById("clockInButton");
+  const outBtn=document.getElementById("clockOutButton");
+  if(select)select.value="";
+  if(status){
+    status.textContent="직원을 선택해주세요.";
+    status.className="attendance-status off";
+  }
+  if(inBtn)inBtn.disabled=true;
+  if(outBtn)outBtn.disabled=true;
+}
 function formatAttendanceTime(timestamp){
   if(!timestamp)return "";
   return new Intl.DateTimeFormat("ko-KR",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(timestamp));
@@ -2906,13 +2921,19 @@ async function clockInNow(){
   const employeeId=document.getElementById("attendanceEmployeeSelect")?.value||"";
   if(!employeeId){alert("직원을 선택해주세요.");return;}
   const employee=workEmployees.find(e=>e.id===employeeId);
-  const ref=db.ref(attendanceOpenPath(employeeId));
-  const snap=await ref.once("value");
-  if(snap.exists()){alert("이미 출근 처리되어 있습니다.");return;}
-  const now=Date.now();
-  await ref.set({employeeName:employee?.name||"",clockInAt:now,createdBy:currentAuthUser.uid});
-  await db.ref(attendanceHistoryPath(todayLocalISO(),employeeId)).push().set({type:"in",timestamp:now});
-  alert(`${employee?.name||"직원"}님 출근 처리되었습니다.`);
+  try{
+    const ref=db.ref(attendanceOpenPath(employeeId));
+    const snap=await ref.once("value");
+    if(snap.exists()){alert("이미 출근 처리되어 있습니다.");return;}
+    const now=Date.now();
+    await ref.set({employeeName:employee?.name||"",clockInAt:now,createdBy:currentAuthUser.uid});
+    await db.ref(attendanceHistoryPath(todayLocalISO(),employeeId)).push().set({type:"in",timestamp:now});
+    alert(`${employee?.name||"직원"}님 출근 처리되었습니다.`);
+    resetAttendanceSelection();
+  }catch(error){
+    console.error("출근 처리 실패:",error);
+    alert("출근 처리에 실패했습니다. Firebase 데이터베이스 규칙을 확인해주세요.");
+  }
 }
 function roundedPaidMinutes(clockInAt,clockOutAt){
   const raw=Math.max(0,(clockOutAt-clockInAt)/60000);
@@ -2938,6 +2959,7 @@ async function clockOutNow(){
   await db.ref(attendanceHistoryPath(date,employeeId)).push().set({type:"out",timestamp:now,clockInAt:Number(open.clockInAt),paidMinutes:minutes});
   await ref.remove();
   alert(`${open.employeeName||"직원"}님 퇴근 처리되었습니다.\n이번 근무 인정시간: ${formatMinutes(minutes)}`);
+  resetAttendanceSelection();
 }
 
 function loadMonthlyWorkReport(){
