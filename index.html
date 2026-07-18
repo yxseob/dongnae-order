@@ -34,6 +34,7 @@ let currentAuthUser = null;
 let currentUserRole = null;
 const OWNER_UID = "xIbeVbstxOQe4oEguP2ez4Ca0Oo1";
 const EMPLOYEE_UID = "lDMHvJYaSbYx1pC3o0wPqELh0ii2";
+const ATTENDANCE_UID = "ECIiUquBqePkgt3WjHELJHuRHy53";
 let databaseConnected = false;
 
 try{
@@ -159,8 +160,18 @@ function isEmployee(){
   return currentUserRole==="employee";
 }
 
+function isAttendance(){
+  return currentUserRole==="attendance";
+}
+
 function showHome(){
-  if(requireLogin()) setActiveScreen("homeScreen");
+  if(!requireLogin()) return;
+  if(isAttendance()){
+    setActiveScreen("workTimeScreen");
+    initializeWorkTimeScreen();
+    return;
+  }
+  setActiveScreen("homeScreen");
 }
 
 function showOrder(){
@@ -1514,6 +1525,23 @@ button,
 }
 
 
+
+/* 출퇴근 전용 계정 */
+.attendance-only{clear:both;padding-top:18px}
+.attendance-clock{text-align:center;font-size:22px;font-weight:900;margin:18px 0;color:#333}
+.attendance-label{display:block;margin:0 0 8px;font-size:18px;font-weight:900}
+.attendance-select{width:100%;padding:16px;border:2px solid #d5d9df;border-radius:14px;background:#fff;font-size:20px;font-weight:900;text-align:center}
+.attendance-status{margin:16px 0;padding:15px;border-radius:13px;text-align:center;font-size:18px;font-weight:900}
+.attendance-status.off{background:#f1f2f4;color:#555}
+.attendance-status.working{background:#e7f7eb;color:#24723a}
+.attendance-buttons{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.attendance-button{min-height:150px;border:none;border-radius:22px;color:#fff;font-size:38px;font-weight:900;cursor:pointer;box-shadow:0 7px 18px rgba(0,0,0,.14)}
+.attendance-button.clock-in{background:#248a42}
+.attendance-button.clock-out{background:#c73535}
+.attendance-button:disabled{background:#c8cbd0;color:#777;box-shadow:none;cursor:not-allowed}
+.attendance-rule{margin-top:16px;padding:12px;border-radius:11px;background:#fff7e6;color:#7a5814;font-size:14px;font-weight:800;line-height:1.5;text-align:center}
+@media(max-width:520px){.attendance-buttons{grid-template-columns:1fr}.attendance-button{min-height:130px;font-size:36px}}
+
 /* ===== 모바일 전용 UI 보정: iPhone / Galaxy / Fold 접힘 화면 ===== */
 @media (max-width: 900px){
   html,body{
@@ -2617,6 +2645,7 @@ function attachWorkEmployeeSync(){
     workEmployees=Object.keys(value).map(id=>({id,name:value[id].name||"직원"}))
       .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
     renderWorkEmployees();
+    renderAttendanceEmployeeSelect();
     loadWorkEntryForSelection();
     if(isOwner())loadMonthlyWorkReport();
   },error=>console.error("직원 목록 동기화 실패:",error));
@@ -2636,13 +2665,21 @@ function initializeWorkTimeScreen(){
   if(month&&!month.value)month.value=currentLocalMonth();
 
   const employeeSection=document.getElementById("workOwnerEmployeeSection");
+  const manualSection=document.getElementById("workManualEntrySection");
   const reportSection=document.getElementById("workOwnerReportSection");
+  const attendanceSection=document.getElementById("attendanceOnlySection");
+  const backButton=document.getElementById("workBackButton");
+
   if(employeeSection)employeeSection.style.display=isOwner()?"block":"none";
+  if(manualSection)manualSection.style.display=isAttendance()?"none":"block";
   if(reportSection)reportSection.style.display=isOwner()?"block":"none";
+  if(attendanceSection)attendanceSection.style.display=isAttendance()?"block":"none";
+  if(backButton)backButton.style.display=isAttendance()?"none":"inline-block";
 
   renderWorkEmployees();
   loadWorkEntryForSelection();
   if(isOwner())loadMonthlyWorkReport();
+  if(isAttendance())initializeAttendanceOnly();
 }
 function renderWorkEmployees(){
   const select=document.getElementById("workEmployeeSelect");
@@ -2774,6 +2811,109 @@ async function saveWorkEntry(){
     setTimeout(()=>{status.textContent="";},1800);
   }
 }
+
+let attendanceStatusRef=null;
+
+function attendanceOpenPath(employeeId){
+  return `dongrae/attendanceOpen/${employeeId}`;
+}
+function attendanceHistoryPath(date,employeeId){
+  return `dongrae/attendanceHistory/${date}/${employeeId}`;
+}
+function renderAttendanceEmployeeSelect(){
+  const select=document.getElementById("attendanceEmployeeSelect");
+  if(!select)return;
+  const previous=select.value;
+  if(!workEmployees.length){
+    select.innerHTML='<option value="">등록된 직원이 없습니다</option>';
+  }else{
+    select.innerHTML='<option value="">직원을 선택하세요</option>'+workEmployees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
+    if(workEmployees.some(e=>e.id===previous))select.value=previous;
+  }
+}
+function initializeAttendanceOnly(){
+  renderAttendanceEmployeeSelect();
+  updateAttendanceClock();
+  clearInterval(window.__attendanceClockTimer);
+  window.__attendanceClockTimer=setInterval(updateAttendanceClock,1000);
+  watchAttendanceStatus();
+}
+function updateAttendanceClock(){
+  const el=document.getElementById("attendanceClock");
+  if(!el)return;
+  el.textContent=new Intl.DateTimeFormat("ko-KR",{year:"numeric",month:"2-digit",day:"2-digit",weekday:"short",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date());
+}
+function attendanceEmployeeChanged(){
+  watchAttendanceStatus();
+}
+function watchAttendanceStatus(){
+  if(attendanceStatusRef)attendanceStatusRef.off();
+  attendanceStatusRef=null;
+  const employeeId=document.getElementById("attendanceEmployeeSelect")?.value||"";
+  const status=document.getElementById("attendanceStatusText");
+  const inBtn=document.getElementById("clockInButton");
+  const outBtn=document.getElementById("clockOutButton");
+  if(!employeeId){
+    if(status)status.textContent="직원을 선택해주세요.";
+    if(inBtn)inBtn.disabled=true;
+    if(outBtn)outBtn.disabled=true;
+    return;
+  }
+  attendanceStatusRef=db.ref(attendanceOpenPath(employeeId));
+  attendanceStatusRef.on("value",snap=>{
+    const value=snap.val();
+    const working=!!(value&&value.clockInAt);
+    if(status){
+      status.textContent=working?`출근 중 · ${formatAttendanceTime(value.clockInAt)} 출근`:"현재 퇴근 상태입니다.";
+      status.className="attendance-status "+(working?"working":"off");
+    }
+    if(inBtn)inBtn.disabled=working;
+    if(outBtn)outBtn.disabled=!working;
+  });
+}
+function formatAttendanceTime(timestamp){
+  if(!timestamp)return "";
+  return new Intl.DateTimeFormat("ko-KR",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(timestamp));
+}
+async function clockInNow(){
+  if(!isAttendance())return;
+  const employeeId=document.getElementById("attendanceEmployeeSelect")?.value||"";
+  if(!employeeId){alert("직원을 선택해주세요.");return;}
+  const employee=workEmployees.find(e=>e.id===employeeId);
+  const ref=db.ref(attendanceOpenPath(employeeId));
+  const snap=await ref.once("value");
+  if(snap.exists()){alert("이미 출근 처리되어 있습니다.");return;}
+  const now=Date.now();
+  await ref.set({employeeName:employee?.name||"",clockInAt:now,createdBy:currentAuthUser.uid});
+  await db.ref(attendanceHistoryPath(todayLocalISO(),employeeId)).push().set({type:"in",timestamp:now});
+  alert(`${employee?.name||"직원"}님 출근 처리되었습니다.`);
+}
+function roundedPaidMinutes(clockInAt,clockOutAt){
+  const raw=Math.max(0,(clockOutAt-clockInAt)/60000);
+  const rounded=Math.round(raw/30)*30;
+  return Math.max(0,rounded-(rounded>=420?60:0));
+}
+async function clockOutNow(){
+  if(!isAttendance())return;
+  const employeeId=document.getElementById("attendanceEmployeeSelect")?.value||"";
+  if(!employeeId){alert("직원을 선택해주세요.");return;}
+  const ref=db.ref(attendanceOpenPath(employeeId));
+  const snap=await ref.once("value");
+  const open=snap.val();
+  if(!open||!open.clockInAt){alert("출근 기록이 없습니다.");return;}
+  const now=Date.now();
+  const date=todayLocalISO();
+  const minutes=roundedPaidMinutes(Number(open.clockInAt),now);
+  const logRef=db.ref(`${workMonthPath(date.slice(0,7))}/${employeeId}/${date}`);
+  const existingSnap=await logRef.once("value");
+  const existing=existingSnap.val()||{};
+  const total=Number(existing.minutes||0)+minutes;
+  await logRef.set({employeeName:open.employeeName||"",minutes:total,updatedAt:firebase.database.ServerValue.TIMESTAMP,updatedBy:currentAuthUser.uid});
+  await db.ref(attendanceHistoryPath(date,employeeId)).push().set({type:"out",timestamp:now,clockInAt:Number(open.clockInAt),paidMinutes:minutes});
+  await ref.remove();
+  alert(`${open.employeeName||"직원"}님 퇴근 처리되었습니다.\n이번 근무 인정시간: ${formatMinutes(minutes)}`);
+}
+
 function loadMonthlyWorkReport(){
   if(!isOwner())return;
   const month=document.getElementById("workReportMonth")?.value||currentLocalMonth();
@@ -3141,6 +3281,8 @@ document.addEventListener("DOMContentLoaded",()=>{
         currentUserRole="owner";
       }else if(user.uid===EMPLOYEE_UID){
         currentUserRole="employee";
+      }else if(user.uid===ATTENDANCE_UID){
+        currentUserRole="attendance";
       }else{
         currentUserRole="blocked";
       }
@@ -3154,7 +3296,7 @@ document.addEventListener("DOMContentLoaded",()=>{
 
       const badge=document.getElementById("roleBadge");
       if(badge){
-        badge.textContent=isOwner() ? t("owner") : t("employee");
+        badge.textContent=isOwner() ? t("owner") : (isAttendance() ? "출퇴근" : t("employee"));
         badge.className="role-badge "+(isOwner() ? "role-owner" : "role-employee");
       }
 
@@ -3166,7 +3308,12 @@ document.addEventListener("DOMContentLoaded",()=>{
       attachOrderSync();
       attachReservationSync();
       attachWorkEmployeeSync();
-      setActiveScreen("homeScreen");
+      if(isAttendance()){
+        setActiveScreen("workTimeScreen");
+        initializeWorkTimeScreen();
+      }else{
+        setActiveScreen("homeScreen");
+      }
     }else if(user && currentUserRole==="blocked"){
       alert("등록되지 않은 계정입니다. 관리자에게 문의하세요.");
       auth.signOut();
@@ -3451,7 +3598,7 @@ function applyLanguage(){
 
   const badge=document.getElementById("roleBadge");
   if(badge && currentUserRole){
-    badge.textContent=isOwner()?t("owner"):t("employee");
+    badge.textContent=isOwner()?t("owner"):(isAttendance()?"출퇴근":t("employee"));
   }
 
   renderPage();
@@ -3473,10 +3620,25 @@ function applyLanguage(){
 
 <div id="workTimeScreen" class="screen">
   <div class="work-card">
-    <button class="home-back" type="button" onclick="showHome()"><span data-i18n="mainMenu">← 메인 메뉴</span></button>
+    <button id="workBackButton" class="home-back" type="button" onclick="showHome()"><span data-i18n="mainMenu">← 메인 메뉴</span></button>
     <button class="logout-btn" style="float:right" type="button" onclick="logoutDongrae()"><span data-i18n="logout">로그아웃</span></button>
 
     <div class="work-title" data-i18n="workTimeManagement">직원 근무시간 기록</div>
+
+
+    <div id="attendanceOnlySection" class="attendance-only" style="display:none">
+      <div id="attendanceClock" class="attendance-clock"></div>
+      <label class="attendance-label" for="attendanceEmployeeSelect">직원 선택</label>
+      <select id="attendanceEmployeeSelect" class="attendance-select" onchange="attendanceEmployeeChanged()">
+        <option value="">직원을 선택하세요</option>
+      </select>
+      <div id="attendanceStatusText" class="attendance-status off">직원을 선택해주세요.</div>
+      <div class="attendance-buttons">
+        <button id="clockInButton" class="attendance-button clock-in" type="button" onclick="clockInNow()" disabled>출근</button>
+        <button id="clockOutButton" class="attendance-button clock-out" type="button" onclick="clockOutNow()" disabled>퇴근</button>
+      </div>
+      <div class="attendance-rule">근무시간은 30분 단위로 반올림되며, 7시간 이상 근무 시 휴게시간 1시간이 자동 차감됩니다.</div>
+    </div>
 
     <div id="workOwnerEmployeeSection" class="work-section">
       <div class="work-section-title" data-i18n="employeeManagement">직원 관리</div>
@@ -3487,7 +3649,7 @@ function applyLanguage(){
       <div id="workEmployeeChips" class="work-employees"></div>
     </div>
 
-    <div class="work-section">
+    <div id="workManualEntrySection" class="work-section">
       <div class="work-section-title" data-i18n="todayWorkEntry">근무시간 입력</div>
       <div class="work-entry-grid">
         <div>
