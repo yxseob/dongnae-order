@@ -2976,8 +2976,9 @@ function playAttendanceDingDong(){
     compressor.connect(ctx.destination);
 
     const notes=[
-      {frequency:1046.5,delay:0,duration:0.34},
-      {frequency:783.99,delay:0.30,duration:0.55}
+      // 기존보다 높은 음역의 밝고 또렷한 딩동
+      {frequency:1318.51,delay:0,duration:0.32},
+      {frequency:987.77,delay:0.28,duration:0.52}
     ];
 
     notes.forEach(note=>{
@@ -3006,13 +3007,16 @@ function playAttendanceDingDong(){
     console.warn("출퇴근 알림음 재생 실패:",error);
   }
 }
-function speakAttendanceMessage(message){
+let attendanceSpeechTimer=null;
+let attendanceSpeechSequence=0;
+function speakAttendanceMessage(message,sequence){
   if(!("speechSynthesis" in window))return;
+  if(sequence!==attendanceSpeechSequence)return;
   try{
+    // 이전에 남아 있던 음성 큐를 완전히 비운 뒤 한 문장만 재생
     window.speechSynthesis.cancel();
     const utterance=new SpeechSynthesisUtterance(message);
     utterance.lang="ko-KR";
-    // 일반 안내방송처럼 또렷하고 밝게 들리도록 설정
     utterance.rate=1.02;
     utterance.pitch=1.08;
     utterance.volume=1;
@@ -3032,15 +3036,22 @@ function speakAttendanceMessage(message){
       selectedVoice=koreanVoices.find(v=>/female|woman|여성/i.test(String(v.name||"")))||koreanVoices[0]||null;
     }
     if(selectedVoice)utterance.voice=selectedVoice;
-    window.speechSynthesis.speak(utterance);
+    utterance.onend=()=>{
+      if(sequence===attendanceSpeechSequence)window.speechSynthesis.cancel();
+    };
+    if(sequence===attendanceSpeechSequence)window.speechSynthesis.speak(utterance);
   }catch(error){
     console.warn("출퇴근 음성 안내 실패:",error);
   }
 }
 function playAttendanceSuccess(type){
+  attendanceSpeechSequence+=1;
+  const sequence=attendanceSpeechSequence;
+  if(attendanceSpeechTimer)clearTimeout(attendanceSpeechTimer);
+  if("speechSynthesis" in window)window.speechSynthesis.cancel();
   playAttendanceDingDong();
   const message=type==="in"?"정상 출근 되었습니다.":"정상 퇴근 되었습니다. 수고하셨습니다.";
-  setTimeout(()=>speakAttendanceMessage(message),760);
+  attendanceSpeechTimer=setTimeout(()=>speakAttendanceMessage(message,sequence),720);
 }
 
 async function clockInNow(){
