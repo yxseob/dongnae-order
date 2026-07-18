@@ -176,15 +176,10 @@ function showHome(){
 
 function showOrder(){
   if(!requireLogin()) return;
+  if(isAttendance()){ denyAccess(t("accessDenied")); return; }
 
-  if(isEmployee()){
-    currentPage="vegetable";
-    renderPage();
-  }else{
-    currentPage="kitchen";
-    renderPage();
-  }
-
+  currentPage="kitchen";
+  renderPage();
   setActiveScreen("orderScreen");
 }
 
@@ -196,6 +191,7 @@ function showSchedule(){
 }
 function showReservations(){
   if(!requireLogin()) return;
+  if(isAttendance()){ denyAccess(t("accessDenied")); return; }
   setActiveScreen("reservationScreen");
   markReservationsSeen();
   renderReservations();
@@ -203,6 +199,7 @@ function showReservations(){
 
 function showWorkTime(){
   if(!requireLogin()) return;
+  if(!isOwner() && !isAttendance()){ denyAccess(t("accessDenied")); return; }
   setActiveScreen("workTimeScreen");
   initializeWorkTimeScreen();
 }
@@ -2308,8 +2305,8 @@ function getFlatItems(pageKey){
 }
 
 function renderPage(){
-  if(isEmployee() && currentPage!=="vegetable"){
-    currentPage="vegetable";
+  if(isEmployee() && currentPage==="hall"){
+    currentPage="kitchen";
   }
 
   const page=pages[currentPage];
@@ -2326,9 +2323,9 @@ function renderPage(){
   const hall=document.getElementById("hallBtn");
   const vegetable=document.getElementById("vegetableBtn");
   if(isEmployee()){
-    back.classList.add("hidden");
     hall.classList.add("hidden");
-    vegetable.classList.add("hidden");
+    back.classList.toggle("hidden",currentPage==="kitchen");
+    vegetable.classList.toggle("hidden",currentPage==="vegetable");
   }else{
     back.classList.toggle("hidden",currentPage==="kitchen");
     hall.classList.toggle("hidden",currentPage==="hall");
@@ -2426,7 +2423,7 @@ function goVegetable(){
 }
 
 function goKitchen(){
-  if(!isOwner()){
+  if(!isOwner() && !isEmployee()){
     denyAccess(t("accessDenied"));
     return;
   }
@@ -2441,7 +2438,7 @@ function goKitchen(){
 
 window.addEventListener("popstate",(event)=>{
   let page=event.state && pages[event.state.page] ? event.state.page : "kitchen";
-  if(isEmployee()) page="vegetable";
+  if(isEmployee() && page==="hall") page="kitchen";
   currentPage=page;
   renderPage();
   window.scrollTo({top:0,behavior:"smooth"});
@@ -2450,7 +2447,7 @@ window.addEventListener("popstate",(event)=>{
 
 async function resetCurrentOrder(){
   if(!currentAuthUser) return;
-  if(!isOwner() && currentPage!=="vegetable"){
+  if(!isOwner() && !(isEmployee() && (currentPage==="kitchen" || currentPage==="vegetable"))){
     denyAccess("접근 권한이 없습니다.");
     return;
   }
@@ -2792,6 +2789,7 @@ async function loadWorkEntryForSelection(){
   }
 }
 async function saveWorkEntry(){
+  if(!isOwner()){denyAccess(t("accessDenied"));return;}
   if(!firebaseReady||!currentAuthUser)return;
   const employeeId=selectedWorkEmployeeId();
   const date=selectedWorkDate();
@@ -3384,9 +3382,14 @@ document.addEventListener("DOMContentLoaded",()=>{
       }
 
       const scheduleButton=document.getElementById("scheduleMenuButton");
-      if(scheduleButton){
-        scheduleButton.classList.toggle("restricted-menu",!isOwner());
-      }
+      const workTimeButton=document.getElementById("workTimeMenuButton");
+      const orderButton=document.getElementById("orderMenuButton");
+      const reservationButton=document.getElementById("reservationMenuButton");
+
+      if(scheduleButton) scheduleButton.style.display=isOwner()?"block":"none";
+      if(workTimeButton) workTimeButton.style.display=isOwner()?"block":"none";
+      if(orderButton) orderButton.style.display=isAttendance()?"none":"block";
+      if(reservationButton) reservationButton.style.display=isAttendance()?"none":"block";
 
       attachOrderSync();
       attachReservationSync();
