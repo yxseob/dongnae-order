@@ -3828,7 +3828,10 @@ document.addEventListener("DOMContentLoaded",()=>{
       }else if(user.uid===ATTENDANCE_UID){
         currentUserRole="attendance";
       }else{
-        currentUserRole="blocked";
+        // Firebase Authentication에 정상 등록된 추가 계정은
+        // 가장 제한적인 출퇴근 전용 권한으로 처리합니다.
+        // 따라서 출퇴근 계정 UID가 변경되어도 "등록되지 않은 계정"으로 차단되지 않습니다.
+        currentUserRole="attendance";
       }
     }
 
@@ -3863,9 +3866,6 @@ document.addEventListener("DOMContentLoaded",()=>{
       }else{
         setActiveScreen("homeScreen");
       }
-    }else if(user && currentUserRole==="blocked"){
-      alert("등록되지 않은 계정입니다. 관리자에게 문의하세요.");
-      auth.signOut();
     }else{
       detachOrderSync();
       detachScheduleListener();
