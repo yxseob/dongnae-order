@@ -2195,6 +2195,58 @@ textarea,
 .action-btn {
   touch-action: manipulation !important;
 }
+
+
+/* ===== 은은한 한지·한옥 배경 무늬 ===== */
+html{
+  background:#f5f0e7;
+}
+body{
+  position:relative;
+  isolation:isolate;
+  background-color:#f5f0e7;
+  background-image:
+    /* 한지의 가는 세로·가로 섬유 */
+    repeating-linear-gradient(88deg,
+      rgba(111,82,55,.018) 0,
+      rgba(111,82,55,.018) 1px,
+      transparent 1px,
+      transparent 17px),
+    repeating-linear-gradient(2deg,
+      rgba(255,255,255,.22) 0,
+      rgba(255,255,255,.22) 1px,
+      transparent 1px,
+      transparent 23px),
+    /* 종이 얼룩처럼 아주 약한 농담 */
+    radial-gradient(circle at 12% 18%,rgba(143,47,43,.035),transparent 27%),
+    radial-gradient(circle at 88% 72%,rgba(111,82,55,.03),transparent 25%),
+    linear-gradient(135deg,#f8f4ec 0%,#f2ece2 100%);
+  background-attachment:fixed;
+}
+
+/* 한옥 창살을 연상시키는 고정 격자. 콘텐츠 위로 올라오지 않음 */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  opacity:.16;
+  background-image:
+    linear-gradient(rgba(113,78,52,.22) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(113,78,52,.22) 1px,transparent 1px),
+    linear-gradient(45deg,transparent 47.5%,rgba(113,78,52,.12) 48%,rgba(113,78,52,.12) 52%,transparent 52.5%),
+    linear-gradient(-45deg,transparent 47.5%,rgba(113,78,52,.12) 48%,rgba(113,78,52,.12) 52%,transparent 52.5%);
+  background-size:88px 88px,88px 88px,176px 176px,176px 176px;
+  -webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.8),rgba(0,0,0,.2) 55%,transparent 92%);
+  mask-image:linear-gradient(to bottom,rgba(0,0,0,.8),rgba(0,0,0,.2) 55%,transparent 92%);
+}
+
+/* 모바일에서는 무늬를 더 연하게 */
+@media(max-width:700px){
+  body::before{opacity:.11;background-size:72px 72px,72px 72px,144px 144px,144px 144px}
+}
+
 </style>
 </head>
 
