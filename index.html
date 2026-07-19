@@ -34,6 +34,7 @@ let currentAuthUser = null;
 let currentUserRole = null;
 const OWNER_UID = "xIbeVbstxOQe4oEguP2ez4Ca0Oo1";
 const EMPLOYEE_UID = "lDMHvJYaSbYx1pC3o0wPqELh0ii2";
+// 사장/직원 UID가 아닌 Firebase 인증 계정은 출퇴근 전용 계정으로 처리합니다.
 let databaseConnected = false;
 
 try{
@@ -158,9 +159,18 @@ function isOwner(){
 function isEmployee(){
   return currentUserRole==="employee";
 }
+function isAttendance(){
+  return currentUserRole==="attendance";
+}
 
 function showHome(){
-  if(requireLogin()) setActiveScreen("homeScreen");
+  if(!requireLogin()) return;
+  if(isAttendance()){
+    setActiveScreen("attendanceScreen");
+    initializeAttendanceScreen();
+    return;
+  }
+  setActiveScreen("homeScreen");
 }
 
 function showOrder(){
@@ -1960,6 +1970,26 @@ textarea,
   touch-action: manipulation !important;
 }
 </style>
+
+<style>
+.role-attendance{background:#e8f5ee;color:#246b43}
+.attendance-card{max-width:620px;margin:auto;background:rgba(255,255,255,.96);border-radius:24px;padding:24px;box-shadow:0 16px 40px rgba(63,39,24,.14);border:1px solid rgba(126,91,58,.16)}
+.attendance-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.attendance-brand{font-size:15px;font-weight:900;color:#8b5e3c;letter-spacing:.12em}
+.attendance-title{font-size:32px;font-weight:950;margin-top:5px;letter-spacing:-1px}
+.attendance-date{margin:16px 0 24px;padding:12px 14px;border-radius:12px;background:#f5efe8;text-align:center;font-weight:900;color:#5f4939}
+.attendance-label{display:block;margin-bottom:8px;font-size:16px;font-weight:900}
+.attendance-select{width:100%;min-height:58px;padding:12px 14px;border:2px solid #d8c6b5;border-radius:14px;background:#fff;font-size:20px;font-weight:900}
+.attendance-status{margin:16px 0;padding:14px;border-radius:13px;background:#f4f5f7;text-align:center;font-size:17px;font-weight:900}
+.attendance-buttons{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.attendance-btn{min-height:150px;border:none;border-radius:22px;color:#fff;font-size:34px;font-weight:950;box-shadow:0 8px 20px rgba(0,0,0,.12);cursor:pointer;touch-action:manipulation}
+.attendance-btn:active{transform:scale(.98)}
+.attendance-btn:disabled{opacity:.35;box-shadow:none}
+.clock-in{background:#237a4b}.clock-out{background:#b43b35}
+.attendance-message{min-height:28px;margin-top:16px;text-align:center;font-size:17px;font-weight:900;color:#2c6e45}
+.attendance-rule{margin-top:14px;padding:12px;border-radius:12px;background:#fff8e8;color:#765b22;font-size:13px;font-weight:800;line-height:1.5}
+@media(max-width:520px){.attendance-card{padding:17px;border-radius:18px}.attendance-title{font-size:28px}.attendance-btn{min-height:132px;font-size:30px}.attendance-buttons{gap:10px}}
+</style>
 </head>
 
 <body>
@@ -2104,7 +2134,7 @@ const pages = {
         color: "group-gold",
         rowColor: "group-gold-row",
         items: [
-          ["다대기","박스"],["사골육수","박스"],["낚지볶음","박스"],["갈비탕","박스"],
+          ["다대기","박스"],["사골육수","박스"],["낚지볶음","박스"],
           ["편육","박스"],["돈가스","박스"],["순살족발","박스"]
         ]
       },
@@ -2657,6 +2687,7 @@ function attachWorkEmployeeSync(){
     workEmployees=Object.keys(value).map(id=>({id,name:value[id].name||"직원"}))
       .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
     renderWorkEmployees();
+    renderAttendanceEmployees();
     loadWorkEntryForSelection();
     if(isOwner())loadMonthlyWorkReport();
   },error=>console.error("직원 목록 동기화 실패:",error));
@@ -3163,6 +3194,113 @@ function renderReservations(){
 
 </script>
 <script>
+let attendanceBusy=false;
+
+function attendanceOpenPath(employeeId){ return `dongrae/attendance/open/${employeeId}`; }
+function attendanceHistoryPath(date,employeeId){ return `dongrae/attendance/history/${date}/${employeeId}`; }
+
+function initializeAttendanceScreen(){
+  const dateEl=document.getElementById("attendanceToday");
+  if(dateEl) dateEl.textContent=new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
+  renderAttendanceEmployees();
+  updateAttendanceState();
+}
+
+function renderAttendanceEmployees(){
+  const select=document.getElementById("attendanceEmployeeSelect");
+  if(!select) return;
+  const previous=select.value;
+  if(!workEmployees.length){
+    select.innerHTML='<option value="">등록된 직원이 없습니다</option>';
+  }else{
+    select.innerHTML='<option value="">직원을 선택하세요</option>'+workEmployees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+    if(workEmployees.some(e=>e.id===previous)) select.value=previous;
+  }
+}
+
+async function updateAttendanceState(){
+  const select=document.getElementById("attendanceEmployeeSelect");
+  const status=document.getElementById("attendanceStatus");
+  const inBtn=document.getElementById("clockInButton");
+  const outBtn=document.getElementById("clockOutButton");
+  if(!select||!status||!inBtn||!outBtn) return;
+  const employeeId=select.value;
+  if(!employeeId){
+    status.textContent="직원을 선택해주세요.";
+    inBtn.disabled=true; outBtn.disabled=true; return;
+  }
+  try{
+    const snap=await db.ref(attendanceOpenPath(employeeId)).once("value");
+    const open=snap.val();
+    if(open&&open.clockIn){
+      const time=new Date(open.clockIn).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"});
+      status.textContent=`출근 중 · ${time} 출근`;
+      inBtn.disabled=true; outBtn.disabled=false;
+    }else{
+      status.textContent="현재 출근 전입니다.";
+      inBtn.disabled=false; outBtn.disabled=true;
+    }
+  }catch(e){
+    console.error(e); status.textContent="출퇴근 상태를 불러오지 못했습니다.";
+  }
+}
+
+async function clockIn(){
+  if(attendanceBusy) return;
+  const employeeId=document.getElementById("attendanceEmployeeSelect")?.value||"";
+  if(!employeeId){ alert("직원을 선택해주세요."); return; }
+  const employee=workEmployees.find(e=>e.id===employeeId);
+  if(!confirm(`${employee?.name||"직원"}님 출근 처리할까요?`)) return;
+  attendanceBusy=true;
+  try{
+    const ref=db.ref(attendanceOpenPath(employeeId));
+    const existing=(await ref.once("value")).val();
+    if(existing&&existing.clockIn){ alert("이미 출근 처리되어 있습니다."); return; }
+    await ref.set({employeeId,employeeName:employee?.name||"",clockIn:Date.now(),accountUid:currentAuthUser.uid});
+    document.getElementById("attendanceMessage").textContent="출근 처리가 완료되었습니다.";
+    await updateAttendanceState();
+  }catch(e){ console.error(e); alert("출근 처리에 실패했습니다."); }
+  finally{ attendanceBusy=false; }
+}
+
+function roundToThirty(minutes){ return Math.round(minutes/30)*30; }
+
+async function clockOut(){
+  if(attendanceBusy) return;
+  const employeeId=document.getElementById("attendanceEmployeeSelect")?.value||"";
+  if(!employeeId){ alert("직원을 선택해주세요."); return; }
+  const employee=workEmployees.find(e=>e.id===employeeId);
+  if(!confirm(`${employee?.name||"직원"}님 퇴근 처리할까요?`)) return;
+  attendanceBusy=true;
+  try{
+    const openRef=db.ref(attendanceOpenPath(employeeId));
+    const open=(await openRef.once("value")).val();
+    if(!open||!open.clockIn){ alert("출근 기록이 없습니다."); return; }
+    const clockOutTime=Date.now();
+    const rawMinutes=Math.max(0,Math.floor((clockOutTime-Number(open.clockIn))/60000));
+    const roundedMinutes=roundToThirty(rawMinutes);
+    const breakMinutes=roundedMinutes>=420?60:0;
+    const finalMinutes=Math.max(0,roundedMinutes-breakMinutes);
+    const date=new Date(open.clockIn-(new Date(open.clockIn).getTimezoneOffset()*60000)).toISOString().slice(0,10);
+    const month=date.slice(0,7);
+    const payload={
+      employeeId,employeeName:employee?.name||open.employeeName||"",clockIn:Number(open.clockIn),clockOut:clockOutTime,
+      rawMinutes,roundedMinutes,breakMinutes,finalMinutes,accountUid:currentAuthUser.uid,
+      updatedAt:firebase.database.ServerValue.TIMESTAMP
+    };
+    const updates={};
+    updates[attendanceHistoryPath(date,employeeId)]=payload;
+    updates[`${workMonthPath(month)}/${employeeId}/${date}`]={employeeName:payload.employeeName,minutes:finalMinutes,clockIn:payload.clockIn,clockOut:payload.clockOut,rawMinutes,roundedMinutes,breakMinutes,updatedAt:firebase.database.ServerValue.TIMESTAMP,updatedBy:currentAuthUser.uid};
+    updates[attendanceOpenPath(employeeId)]=null;
+    await db.ref().update(updates);
+    document.getElementById("attendanceMessage").textContent=`퇴근 완료 · 최종 ${formatMinutes(finalMinutes)}${breakMinutes?" (휴게 1시간 차감)":""}`;
+    await updateAttendanceState();
+  }catch(e){ console.error(e); alert("퇴근 처리에 실패했습니다."); }
+  finally{ attendanceBusy=false; }
+}
+</script>
+
+<script>
 document.addEventListener("DOMContentLoaded",()=>{
   applyLanguage();
   if(!firebaseReady || !auth){
@@ -3182,34 +3320,35 @@ document.addEventListener("DOMContentLoaded",()=>{
       }else if(user.uid===EMPLOYEE_UID){
         currentUserRole="employee";
       }else{
-        currentUserRole="blocked";
+        currentUserRole="attendance";
       }
     }
 
     updateCloudStatus();
 
-    if(user && currentUserRole!=="blocked"){
+    if(user){
       const accountEmail=document.getElementById("accountEmail");
-      if(accountEmail) accountEmail.textContent=user.email||"관리자";
+      if(accountEmail) accountEmail.textContent=user.email||"로그인 계정";
 
       const badge=document.getElementById("roleBadge");
       if(badge){
-        badge.textContent=isOwner() ? t("owner") : t("employee");
-        badge.className="role-badge "+(isOwner() ? "role-owner" : "role-employee");
+        const roleText=isOwner()?t("owner"):(isEmployee()?t("employee"):"출퇴근");
+        badge.textContent=roleText;
+        badge.className="role-badge "+(isOwner()?"role-owner":(isEmployee()?"role-employee":"role-attendance"));
       }
 
-      const scheduleButton=document.getElementById("scheduleMenuButton");
-      if(scheduleButton){
-        scheduleButton.classList.toggle("restricted-menu",!isOwner());
-      }
-
-      attachOrderSync();
-      attachReservationSync();
       attachWorkEmployeeSync();
-      setActiveScreen("homeScreen");
-    }else if(user && currentUserRole==="blocked"){
-      alert("등록되지 않은 계정입니다. 관리자에게 문의하세요.");
-      auth.signOut();
+
+      if(isAttendance()){
+        setActiveScreen("attendanceScreen");
+        initializeAttendanceScreen();
+      }else{
+        const scheduleButton=document.getElementById("scheduleMenuButton");
+        if(scheduleButton) scheduleButton.classList.toggle("restricted-menu",!isOwner());
+        attachOrderSync();
+        attachReservationSync();
+        setActiveScreen("homeScreen");
+      }
     }else{
       detachOrderSync();
       detachScheduleListener();
@@ -3332,7 +3471,6 @@ const ITEM_VI = {
   "다대기":"Sốt gia vị cay",
   "사골육수":"Nước hầm xương bò",
   "낚지볶음":"Bạch tuộc xào",
-  "갈비탕":"Canh sườn bò",
   "편육":"Thịt ép lát",
   "돈가스":"Thịt heo chiên xù",
   "순살족발":"Chân giò rút xương",
@@ -3511,6 +3649,29 @@ function applyLanguage(){
 
 </script>
 
+
+
+<div id="attendanceScreen" class="screen">
+  <div class="attendance-card">
+    <div class="attendance-top">
+      <div>
+        <div class="attendance-brand">동래옥</div>
+        <div class="attendance-title">출퇴근 기록</div>
+      </div>
+      <button class="logout-btn" type="button" onclick="logoutDongrae()">로그아웃</button>
+    </div>
+    <div id="attendanceToday" class="attendance-date"></div>
+    <label class="attendance-label" for="attendanceEmployeeSelect">직원 선택</label>
+    <select id="attendanceEmployeeSelect" class="attendance-select" onchange="updateAttendanceState()"></select>
+    <div id="attendanceStatus" class="attendance-status">직원을 선택해주세요.</div>
+    <div class="attendance-buttons">
+      <button id="clockInButton" class="attendance-btn clock-in" type="button" onclick="clockIn()">출근</button>
+      <button id="clockOutButton" class="attendance-btn clock-out" type="button" onclick="clockOut()">퇴근</button>
+    </div>
+    <div id="attendanceMessage" class="attendance-message"></div>
+    <div class="attendance-rule">근무시간은 30분 단위로 반올림하며, 7시간 이상이면 휴게시간 1시간이 자동 차감됩니다.</div>
+  </div>
+</div>
 
 <div id="workTimeScreen" class="screen">
   <div class="work-card">
