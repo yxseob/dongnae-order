@@ -1965,6 +1965,38 @@ button,
 }
 
 </style>
+
+<style id="galaxy-all-menu-scroll-fix">
+/* Galaxy/Android: 출퇴근 전용 화면을 제외한 모든 메뉴에서 세로 스크롤 허용 */
+@media (max-width: 900px){
+  .screen.active:not(#loginScreen):not(.attendance-mode){
+    display:block;
+    width:100%;
+    max-width:100%;
+    height:calc(100dvh - 24px);
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-y:auto;
+    touch-action:pan-y;
+  }
+
+  .screen.active:not(#loginScreen):not(.attendance-mode) > *{
+    min-height:max-content;
+    touch-action:pan-y;
+  }
+}
+
+/* dvh 미지원 구형 Android 브라우저 대응 */
+@supports not (height: 100dvh){
+  @media (max-width: 900px){
+    .screen.active:not(#loginScreen):not(.attendance-mode){
+      height:calc(100vh - 24px);
+    }
+  }
+}
+</style>
 </head>
 
 <body>
@@ -2109,7 +2141,7 @@ const pages = {
         color: "group-gold",
         rowColor: "group-gold-row",
         items: [
-          ["다대기","박스"],["사골육수","박스"],["낚지볶음","박스"],["갈비탕","박스"],
+          ["다대기","박스"],["사골육수","박스"],["낚지볶음","박스"],
           ["편육","박스"],["돈가스","박스"],["순살족발","박스"]
         ]
       },
@@ -2693,6 +2725,10 @@ function initializeWorkTimeScreen(){
   const backButton=document.getElementById("workBackButton");
   const pageTitle=document.getElementById("workTimePageTitle");
   const attendanceLogo=document.getElementById("attendanceLogo");
+  const workTimeScreen=document.getElementById("workTimeScreen");
+
+  /* 출퇴근 전용 계정에서는 기존 화면 동작을 그대로 유지 */
+  if(workTimeScreen)workTimeScreen.classList.toggle("attendance-mode",isAttendance());
 
   if(pageTitle)pageTitle.style.display=isAttendance()?"none":"block";
   if(attendanceLogo)attendanceLogo.style.display=isAttendance()?"flex":"none";
