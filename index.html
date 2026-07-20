@@ -120,10 +120,7 @@ async function logoutDongrae(){
   if(!confirm("로그아웃하시겠습니까?")) return;
 
   try{
-    detachScheduleListener();
-    detachOrderSync();
-    detachActivitySync();
-    clearTimeout(dailyResetTimer);
+    if(typeof DongnaeokRealtimeSync!=="undefined") DongnaeokRealtimeSync.stop();
     await auth.signOut();
   }catch(error){
     console.error("로그아웃 실패:",error);
@@ -2378,6 +2375,37 @@ button{-webkit-tap-highlight-color:transparent;}
   #homeScreen .menu-notification-dot{top:7px!important;right:7px!important;width:17px!important;height:17px!important;}
 }
 </style>
+
+<style id="homeRefreshButtonStyle">
+#homeScreen .home-card{position:relative;}
+.home-refresh-btn{
+  position:absolute;
+  top:18px;
+  right:18px;
+  width:44px;
+  height:44px;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  background:#fff;
+  color:#111827;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:21px;
+  box-shadow:0 4px 14px rgba(15,23,42,.08);
+  cursor:pointer;
+  z-index:20;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+.home-refresh-btn:active{transform:scale(.96);}
+.home-refresh-btn:disabled{opacity:.55;cursor:default;}
+.home-refresh-btn.is-loading .home-refresh-icon{animation:homeRefreshSpin .8s linear infinite;}
+@keyframes homeRefreshSpin{to{transform:rotate(360deg);}}
+@media(max-width:600px){
+  .home-refresh-btn{top:14px;right:14px;width:42px;height:42px;border-radius:13px;}
+}
+</style>
 </head>
 
 <body>
@@ -2408,6 +2436,9 @@ button{-webkit-tap-highlight-color:transparent;}
 
   <div id="homeScreen" class="screen">
     <div class="home-card">
+      <button id="homeRefreshButton" class="home-refresh-btn" type="button" onclick="refreshHomeData()" aria-label="전체 데이터 새로고침" title="새로고침">
+        <span class="home-refresh-icon" aria-hidden="true">↻</span>
+      </button>
       <div class="logo">
         <img src="logo_clean.png" alt="동래옥">
       </div>
@@ -4013,6 +4044,50 @@ function renderReservations(){
 }
 
 </script>
+
+<script id="dongnaeokRealtimeSyncCore">
+/*
+ * 동래옥 실시간 동기화 코어
+ * UI/알림 코드와 분리된 단일 진입점입니다.
+ * 이후 화면 디자인을 수정해도 아래 start/stop/reconnect만 호출하면 됩니다.
+ */
+const DongnaeokRealtimeSync = Object.freeze({
+  started:false,
+  start(){
+    if(!firebaseReady || !currentAuthUser || currentUserRole==="blocked") return;
+    this.stop();
+    attachOrderSync();
+    attachReservationSync();
+    attachActivitySync();
+    attachWorkEmployeeSync();
+    if(isOwner()) attachScheduleListener();
+    ensureDailyOrderReset();
+    this.started=true;
+  },
+  stop(){
+    detachOrderSync();
+    detachScheduleListener();
+    detachReservationSync();
+    detachActivitySync();
+    detachWorkSync();
+    clearTimeout(dailyResetTimer);
+    this.started=false;
+  },
+  reconnect(){
+    if(!firebaseReady || !currentAuthUser) return;
+    this.start();
+  }
+});
+
+/* 모바일에서 네트워크가 돌아오거나 앱이 다시 활성화되면 리스너를 자동 복구합니다. */
+window.addEventListener("online",()=>DongnaeokRealtimeSync.reconnect());
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible" && currentAuthUser){
+    DongnaeokRealtimeSync.reconnect();
+  }
+});
+</script>
+
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
   applyLanguage();
@@ -4061,11 +4136,7 @@ document.addEventListener("DOMContentLoaded",()=>{
       if(orderButton) orderButton.style.display=isAttendance()?"none":"block";
       if(reservationButton) reservationButton.style.display=isAttendance()?"none":"block";
 
-      attachOrderSync();
-      attachReservationSync();
-      attachActivitySync();
-      ensureDailyOrderReset();
-      attachWorkEmployeeSync();
+      DongnaeokRealtimeSync.start();
       if(isAttendance()){
         setActiveScreen("workTimeScreen");
         initializeWorkTimeScreen();
@@ -4076,12 +4147,7 @@ document.addEventListener("DOMContentLoaded",()=>{
       alert("등록되지 않은 계정입니다. 관리자에게 문의하세요.");
       auth.signOut();
     }else{
-      detachOrderSync();
-      detachScheduleListener();
-      detachReservationSync();
-      detachActivitySync();
-      clearTimeout(dailyResetTimer);
-      detachWorkSync();
+      DongnaeokRealtimeSync.stop();
       setActiveScreen("loginScreen");
 
       const accountEmail=document.getElementById("accountEmail");
@@ -4572,5 +4638,31 @@ function applyLanguage(){
 <!-- Firebase 실시간 동기화 안정화: 기존 리스너 사용 -->
 
 
+
+<script id="homeRefreshButtonScript">
+async function refreshHomeData(){
+  if(!currentAuthUser || !firebaseReady) return;
+  const button=document.getElementById("homeRefreshButton");
+  if(button && button.disabled) return;
+  if(button){
+    button.disabled=true;
+    button.classList.add("is-loading");
+  }
+  try{
+    // 실시간 동기화 코어를 재연결합니다. 새로고침은 보조 기능이며 평소에는 자동 동기화됩니다.
+    DongnaeokRealtimeSync.reconnect();
+    await ensureDailyOrderReset();
+    await new Promise(resolve=>setTimeout(resolve,700));
+  }catch(error){
+    console.error("전체 데이터 새로고침 실패:",error);
+    alert("데이터 새로고침에 실패했습니다. 인터넷 연결을 확인해주세요.");
+  }finally{
+    if(button){
+      button.disabled=false;
+      button.classList.remove("is-loading");
+    }
+  }
+}
+</script>
 </body>
 </html>
