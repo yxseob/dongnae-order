@@ -191,6 +191,7 @@ function showOrder(){
 function showSchedule(){
   if(!requireLogin()) return;
   if(!isOwner()){ denyAccess(t("accessDenied")); return; }
+  markActivitySeen("schedule");
   setActiveScreen("scheduleScreen");
   renderSchedule();
 }
@@ -205,6 +206,7 @@ function showReservations(){
 function showWorkTime(){
   if(!requireLogin()) return;
   if(!isOwner() && !isAttendance()){ denyAccess(t("accessDenied")); return; }
+  markActivitySeen("work");
   setActiveScreen("workTimeScreen");
   initializeWorkTimeScreen();
 }
@@ -355,6 +357,7 @@ function queueScheduleCloudSave(){
           updatedAt:firebase.database.ServerValue.TIMESTAMP
         });
         const status=document.getElementById("saveStatus");
+        await publishActivity("schedule",{week:isoDate(scheduleWeekStart),action:"edit"});
         if(status) status.textContent="자동 저장 완료";
       }catch(error){
         console.error("스케줄 저장 실패:",error);
@@ -1240,8 +1243,8 @@ button,
 }
 .menu-notification-dot.show{display:block}
 
-.reservation-badge{display:none!important;margin-top:8px;padding:7px 10px;border-radius:10px;background:#fff0f0;color:#b42323;font-size:13px;font-weight:900}
-.reservation-badge.show{display:block}
+.reservation-badge{display:none;margin-top:8px;padding:7px 10px;border-radius:10px;background:#fff0f0;color:#b42323;font-size:13px;font-weight:900}
+.reservation-badge.show{display:block!important}
 .reservation-card{max-width:980px;margin:auto;background:#fff;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
 .reservation-title{text-align:center;font-size:24px;font-weight:900;margin:16px 0}
 .reservation-toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
@@ -2359,6 +2362,22 @@ button{-webkit-tap-highlight-color:transparent;}
 #homeScreen .menu-notification-dot.show{display:block!important;}
 </style>
 
+
+<style id="dongnaeok-mobile-notification-final">
+#homeScreen .menu-card{position:relative!important;overflow:visible!important;transform:translateZ(0);}
+#homeScreen .menu-notification-dot{
+  position:absolute!important;top:8px!important;right:8px!important;
+  width:16px!important;height:16px!important;min-width:16px!important;min-height:16px!important;
+  display:none!important;background:#ff2d2d!important;border:3px solid #fff!important;
+  border-radius:999px!important;box-sizing:border-box!important;z-index:2147483647!important;
+  box-shadow:0 2px 8px rgba(255,45,45,.55)!important;
+}
+#homeScreen .menu-notification-dot.show{display:block!important;visibility:visible!important;opacity:1!important;}
+#reservationMenuButton .reservation-badge.show{display:block!important;visibility:visible!important;opacity:1!important;}
+@media(max-width:700px){
+  #homeScreen .menu-notification-dot{top:7px!important;right:7px!important;width:17px!important;height:17px!important;}
+}
+</style>
 </head>
 
 <body>
@@ -2412,11 +2431,13 @@ button{-webkit-tap-highlight-color:transparent;}
           <div class="menu-desc" data-i18n="orderDesc">주방·홀·야채 품목을 선택하고 발주서 이미지를 생성합니다.</div>
         </button>
         <button id="scheduleMenuButton" class="menu-card" type="button" onclick="showSchedule()">
+          <span id="scheduleNotificationDot" class="menu-notification-dot" aria-label="새 스케줄 변경 알림"></span>
           <div class="menu-icon">📅</div>
           <div class="menu-name" data-i18n="schedule">스케줄</div>
           <div class="menu-desc" data-i18n="scheduleDesc">직원별 주간 근무시간을 작성하고 휴대폰에 저장합니다.</div>
         </button>
       <button id="workTimeMenuButton" class="menu-card" type="button" onclick="showWorkTime()">
+        <span id="workNotificationDot" class="menu-notification-dot" aria-label="새 근무시간 변경 알림"></span>
         <div class="menu-icon">⏱️</div>
         <div class="menu-text">
           <div class="menu-name" data-i18n="workTime">근무시간</div>
@@ -2424,7 +2445,6 @@ button{-webkit-tap-highlight-color:transparent;}
         </div>
       </button>
       <button id="reservationMenuButton" class="menu-card" type="button" onclick="showReservations()">
-        <span id="reservationNotificationDot" class="menu-notification-dot" aria-label="새 예약 변경 알림"></span>
         <div class="menu-icon">📞</div>
         <div class="menu-text">
           <div class="menu-name" data-i18n="reservation">예약</div>
@@ -2632,10 +2652,8 @@ const dongraeDeviceId=(()=>{
   }
   return id;
 })();
-let orderActivityRef=null;
-let reservationActivityRef=null;
-let latestOrderActivityAt=0;
-let latestReservationActivityAt=0;
+let activityRefs={order:null,schedule:null,work:null};
+let latestActivityAt={order:0,schedule:0,work:0};
 let dailyResetTimer=null;
 
 function todayKoreaISO(){
@@ -2646,19 +2664,18 @@ function todayKoreaISO(){
 function activitySeenKey(type){return `dongrae_${type}_activity_seen_at`;}
 function getActivitySeenAt(type){return Number(localStorage.getItem(activitySeenKey(type))||0);}
 function updateActivityDots(){
-  const orderDot=document.getElementById("orderNotificationDot");
-  const reservationDot=document.getElementById("reservationNotificationDot");
-  if(orderDot)orderDot.classList.toggle("show",latestOrderActivityAt>getActivitySeenAt("order"));
-  if(reservationDot)reservationDot.classList.toggle("show",latestReservationActivityAt>getActivitySeenAt("reservation"));
+  const map={order:"orderNotificationDot",schedule:"scheduleNotificationDot",work:"workNotificationDot"};
+  Object.entries(map).forEach(([type,id])=>{
+    const el=document.getElementById(id);
+    if(el)el.classList.toggle("show",Number(latestActivityAt[type]||0)>getActivitySeenAt(type));
+  });
 }
-function markOrderActivitySeen(){
-  if(latestOrderActivityAt>0)localStorage.setItem(activitySeenKey("order"),String(latestOrderActivityAt));
+function markActivitySeen(type){
+  const at=Number(latestActivityAt[type]||0);
+  if(at>0)localStorage.setItem(activitySeenKey(type),String(at));
   updateActivityDots();
 }
-function markReservationActivitySeen(){
-  if(latestReservationActivityAt>0)localStorage.setItem(activitySeenKey("reservation"),String(latestReservationActivityAt));
-  updateActivityDots();
-}
+function markOrderActivitySeen(){markActivitySeen("order");}
 async function publishActivity(type,detail={}){
   if(!firebaseReady||!currentAuthUser)return;
   try{
@@ -2666,31 +2683,33 @@ async function publishActivity(type,detail={}){
       ...detail,
       updatedAt:firebase.database.ServerValue.TIMESTAMP,
       updatedByDevice:dongraeDeviceId,
-      updatedByUser:currentAuthUser.uid
+      updatedByUser:currentAuthUser.uid,
+      nonce:Date.now()+"_"+Math.random().toString(36).slice(2,8)
     });
   }catch(error){console.warn(type+" 알림 기록 실패:",error);}
 }
 function attachActivitySync(){
   detachActivitySync();
   if(!firebaseReady||!currentAuthUser)return;
-  orderActivityRef=db.ref("dongrae/activity/order");
-  reservationActivityRef=db.ref("dongrae/activity/reservation");
-  orderActivityRef.on("value",snap=>{
-    const v=snap.val()||{};
-    if(v.updatedByDevice!==dongraeDeviceId)latestOrderActivityAt=Number(v.updatedAt||0);
-    updateActivityDots();
-  });
-  reservationActivityRef.on("value",snap=>{
-    const v=snap.val()||{};
-    if(v.updatedByDevice!==dongraeDeviceId)latestReservationActivityAt=Number(v.updatedAt||0);
-    updateActivityDots();
+  ["order","schedule","work"].forEach(type=>{
+    const ref=db.ref(`dongrae/activity/${type}`);
+    activityRefs[type]=ref;
+    ref.on("value",snap=>{
+      const v=snap.val()||{};
+      const at=Number(v.updatedAt||0);
+      if(v.updatedByDevice!==dongraeDeviceId && at>0){
+        latestActivityAt[type]=Math.max(Number(latestActivityAt[type]||0),at);
+      }
+      updateActivityDots();
+    });
   });
 }
 function detachActivitySync(){
-  if(orderActivityRef)orderActivityRef.off();
-  if(reservationActivityRef)reservationActivityRef.off();
-  orderActivityRef=null;reservationActivityRef=null;
-  latestOrderActivityAt=0;latestReservationActivityAt=0;
+  Object.keys(activityRefs).forEach(type=>{
+    if(activityRefs[type])activityRefs[type].off();
+    activityRefs[type]=null;
+    latestActivityAt[type]=0;
+  });
   updateActivityDots();
 }
 async function ensureDailyOrderReset(){
@@ -3249,12 +3268,14 @@ async function addWorkEmployee(){
     name,
     createdAt:firebase.database.ServerValue.TIMESTAMP
   });
+  await publishActivity("work",{action:"employee_add"});
   input.value="";
 }
 async function deleteWorkEmployee(id){
   if(!isOwner())return;
   if(!confirm(t("confirmDeleteEmployee")))return;
   await db.ref(workEmployeesPath()+"/"+id).remove();
+  await publishActivity("work",{action:"employee_delete"});
 }
 function selectedWorkEmployeeId(){
   return document.getElementById("workEmployeeSelect")?.value||"";
@@ -3338,6 +3359,7 @@ async function saveWorkEntry(){
     updatedAt:firebase.database.ServerValue.TIMESTAMP,
     updatedBy:currentAuthUser.uid
   });
+  await publishActivity("work",{action:"save",date,employeeId});
 
   const status=document.getElementById("workSaveStatus");
   if(status){
@@ -3631,6 +3653,7 @@ async function clockOutNow(){
     });
 
     await ref.remove();
+    await publishActivity("work",{action:"attendance_clockout",date,employeeId});
     resetAttendanceSelection();
     playAttendanceSuccess("out");
   }catch(error){
@@ -3655,6 +3678,7 @@ async function deleteWorkDay(employeeId,date){
   if(!confirm(t("deleteWorkDay")))return;
   const month=date.slice(0,7);
   await db.ref(`${workMonthPath(month)}/${employeeId}/${date}`).remove();
+  await publishActivity("work",{action:"delete_day",date,employeeId});
 
   if(selectedWorkEmployeeId()===employeeId && selectedWorkDate()===date){
     document.getElementById("workHours").value=0;
@@ -3667,12 +3691,14 @@ async function deleteEmployeeMonth(employeeId){
   const month=document.getElementById("workReportMonth")?.value||currentLocalMonth();
   if(!confirm(t("deleteEmployeeMonth")))return;
   await db.ref(`${workMonthPath(month)}/${employeeId}`).remove();
+  await publishActivity("work",{action:"delete_employee_month",month,employeeId});
 }
 async function deleteEntireWorkMonth(){
   if(!isOwner())return;
   const month=document.getElementById("workReportMonth")?.value||currentLocalMonth();
   if(!confirm(t("deleteEntireMonthConfirm")))return;
   await db.ref(workMonthPath(month)).remove();
+  await publishActivity("work",{action:"delete_month",month});
 }
 
 
@@ -3809,7 +3835,6 @@ function updateReservationBadge(){
 }
 function markReservationsSeen(){
   if(latestReservationCreatedAt>0)localStorage.setItem(reservationSeenKey(),String(latestReservationCreatedAt));
-  markReservationActivitySeen();
   updateReservationBadge();
 }
 function attachReservationSync(){
@@ -3866,7 +3891,6 @@ async function saveReservation(){
     const ref=db.ref("dongrae/reservations").push();
     await ref.set({...payload,completed:false,createdAt:firebase.database.ServerValue.TIMESTAMP,createdBy:currentAuthUser.uid});
   }
-  await publishActivity("reservation",{action:editingReservationId?"edit":"add"});
   clearReservationForm();
 }
 function editReservation(id){
@@ -3888,13 +3912,11 @@ async function toggleReservationComplete(id,current){
     completedAt:!current?firebase.database.ServerValue.TIMESTAMP:null,
     completedBy:!current&&currentAuthUser?currentAuthUser.uid:null
   });
-  await publishActivity("reservation",{action:"complete"});
 }
 async function deleteReservation(id){
   if(!isOwner()){alert(t("deleteOwnerOnly"));return;}
   if(!confirm(t("deleteReservation")))return;
   await db.ref("dongrae/reservations/"+id).remove();
-  await publishActivity("reservation",{action:"delete"});
 }
 function formatReservationDate(date){
   if(!date)return "";
@@ -4627,7 +4649,6 @@ function applyLanguage(){
       const ref=db.ref("dongrae/reservations").push();
       await ref.set({...payload,completed:false,createdAt:firebase.database.ServerValue.TIMESTAMP,createdBy:currentAuthUser.uid});
     }
-    await publishActivity("reservation",{action:wasEditing?"edit":"add"});
     clearReservationForm();
   };
 
@@ -4640,8 +4661,7 @@ function applyLanguage(){
       updatedAt:firebase.database.ServerValue.TIMESTAMP,
       updatedByDevice:dongraeDeviceId
     });
-    await publishActivity("reservation",{action:"complete"});
-  };
+    };
 
   // 기존 데이터베이스 활동 경로와 실제 데이터 변경 감지를 함께 사용
   const oldAttachActivitySync=attachActivitySync;
